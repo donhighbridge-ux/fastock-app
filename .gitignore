@@ -12,6 +12,8 @@ node_modules
 dist
 dist-ssr
 *.local
+mock_stock.csv
+generateMockData.cjs
 
 # Editor directories and files
 .vscode/*

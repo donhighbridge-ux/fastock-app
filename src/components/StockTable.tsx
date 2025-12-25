@@ -28,12 +28,6 @@ const getCleanSize = (rawSize: string, sizeMap: Record<string, string>): string 
 };
 
 const StockDetailModal: React.FC<StockDetailModalProps> = ({ isOpen, onClose, variants, status, sizeMap }) => {
-  // 1. Hooks siempre primero
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   // 2. Lógica de cálculo (Siempre se ejecuta, incluso si está cerrado, es muy rápido)
   const { zeroStockSizes, lowStockSizes } = useMemo(() => {
@@ -52,10 +46,17 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({ isOpen, onClose, va
   }, [variants, sizeMap]);
 
   // 3. Renderizado Condicional (AHORA SÍ es seguro retornar)
-  if (!isOpen || !mounted) return null;
+  if (!isOpen) return null;
+
+  console.log("🖥️ [DEBUG] Renderizando Modal. Variantes:", variants?.length, "Status:", status);
+  console.log("📉 [DEBUG] Detalles calculados -> Zeros:", zeroStockSizes, "Lows:", lowStockSizes);
 
   // 4. Helper de renderizado de contenido
   const renderContent = () => {
+    if (!variants || variants.length === 0) {
+      return <p className="text-red-500 font-bold">⚠️ Error: No se encontraron variantes (Array vacío).</p>;
+    }
+
     switch (status) {
       case 'COMPLETO':
         return <p className="text-green-700 font-medium">Nada que ver aquí, todo bien 😄</p>;
@@ -91,11 +92,24 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({ isOpen, onClose, va
   // 5. El Portal
   return createPortal(
     <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      // CAMBIO: Usamos estilos inline para GARANTIZAR visibilidad (bypass de Tailwind)
+      style={{ 
+        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        backgroundColor: 'rgba(0,0,0,0.7)', 
+        zIndex: 2147483647 
+      }}
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg relative m-4 transform transition-all"
+        className="bg-white rounded-xl shadow-2xl p-6 w-full max-w-lg relative m-4"
+        // CAMBIO: Estilos forzados para el contenedor blanco
+        style={{ 
+            backgroundColor: 'white', 
+            minWidth: '300px', 
+            minHeight: '200px',
+            border: '4px solid blue' // Borde de depuración para localizarlo
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex justify-between items-center mb-4">
@@ -164,11 +178,16 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary }) => {
   }, []);
 
   const handleOpenModal = (baseSku: string, status: StockStatus) => {
+    console.log("🔘 [DEBUG] Click detectado. BaseSKU:", baseSku, "Status:", status);
+
     const variants = data.filter((item) => {
       const parts = item.sku.split('_');
       const itemBaseSku = parts.length >= 2 ? parts.slice(0, 2).join('_').toLowerCase() : item.sku.toLowerCase();
       return itemBaseSku === baseSku;
     });
+
+    console.log("📊 [DEBUG] Variantes encontradas:", variants.length, variants);
+
     setModalState({ isOpen: true, variants, status });
   };
 
