@@ -61,7 +61,7 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary }) => {
   };
 
   // 1. EL CEREBRO: Lógica de Agrupación y Suma (Extraída a Hook)
-  const groupedData = useStockGrouping(data, productDictionary);
+  const groupedData = useStockGrouping(data, productDictionary, sizeMap);
 
   // 2. LA CARA: Renderizado Visual
   if (!groupedData || groupedData.length === 0) {
@@ -98,12 +98,12 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary }) => {
               <th scope="col" className="px-3 py-4 text-center text-xs font-bold text-purple-600 uppercase tracking-wider min-w-[80px]">
                 RA
               </th>
-              <th scope="col" className="px-3 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[80px]">
+              {/* <th scope="col" className="px-3 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[80px]">
                 CD
               </th>
               <th scope="col" className="px-3 py-4 text-center text-xs font-bold text-orange-400 uppercase tracking-wider min-w-[100px]">
                 En Tránsito
-              </th>
+              </th> */}
             </tr>
           </thead>
 
@@ -130,14 +130,14 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary }) => {
 
                 {/* 3. Columna Stock: El dato Estrella. Grande y claro. */}
                 <td className="whitespace-nowrap px-2 py-4 text-center">
-                  <span className={`text-xs font-bold ${group.stock > 0 ? 'text-blue-700' : 'text-red-400'}`}>
+                  <span className={`text-xs font-bold cursor-pointer hover:bg-gray-50 px-2 py-1 rounded ${group.stock > 0 ? 'text-blue-700' : 'text-red-400'}`}>
                     {group.stock}
                   </span>
                 </td>
 
                 {/* Columna Venta 2W */}
                 <td className="whitespace-nowrap px-2 py-4 text-center">
-                  <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-full">
+                  <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-full cursor-pointer hover:bg-gray-50">
                     {group.sales2w}
                   </span>
                 </td>
@@ -146,7 +146,8 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary }) => {
                 <td className="whitespace-nowrap px-2 py-4 text-center">
                   <button
                     onClick={() => handleOpenModal(group.baseSku, group.status)}
-                    className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium cursor-pointer focus:outline-none ${group.health.color}`}
+                    className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer focus:outline-none shadow-sm transition-all hover:shadow-md max-w-[200px] truncate ${group.health.color}`}
+                    title={group.health.texto}
                   >
                     {group.health.texto}
                   </button>
@@ -157,12 +158,12 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary }) => {
                   {group.ra}
                 </td>
                 {/* Columna Stock CD */}
-                <td className="whitespace-nowrap px-2 py-4 text-center text-xs text-gray-600">
+                {/* <td className="whitespace-nowrap px-2 py-4 text-center text-xs text-gray-600">
                   {group.stock_cd}
-                </td>
+                </td> */}
 
                 {/* 4. Columna Tránsito: Información secundaria, más sutil */}
-                <td className="whitespace-nowrap px-2 py-4 text-xs text-center text-gray-400 font-medium">
+                {/* <td className="whitespace-nowrap px-2 py-4 text-xs text-center text-gray-400 font-medium">
                   {group.transit > 0 ? (
                     <span className="text-orange-500 flex items-center justify-center gap-1">
                       🚚 {group.transit}
@@ -170,7 +171,7 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary }) => {
                   ) : (
                     "-"
                   )}
-                </td>
+                </td> */}
               </tr>
             ))}
           </tbody>

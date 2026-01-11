@@ -1,7 +1,8 @@
 import { useMemo } from 'react';
 import type { NormalizedRow, StockStatus } from '../types';
+import { getCleanSize } from '../utils/stockUtils';
 
-export const useStockGrouping = (data: NormalizedRow[], productDictionary: Record<string, string>) => {
+export const useStockGrouping = (data: NormalizedRow[], productDictionary: Record<string, string>, sizeMap: Record<string, string>) => {
   // 1. EL CEREBRO: Lógica de Agrupación y Suma
   const groupedData = useMemo(() => {
     const groups: Record<string, {
@@ -16,6 +17,9 @@ export const useStockGrouping = (data: NormalizedRow[], productDictionary: Recor
       originalSku: string; // Guardamos uno de referencia
       hasZero: boolean;
       hasOne: boolean;
+      comingSizes: string[];
+      requestSizes: string[];
+      outSizes: string[];
     }> = {};
 
     data.forEach((item) => {
@@ -42,6 +46,9 @@ export const useStockGrouping = (data: NormalizedRow[], productDictionary: Recor
           isDictionary: !!dictionaryName,
           hasZero: false,
           hasOne: false,
+          comingSizes: [],
+          requestSizes: [],
+          outSizes: [],
         };
       }
 
@@ -54,23 +61,59 @@ export const useStockGrouping = (data: NormalizedRow[], productDictionary: Recor
 
       // Lógica para determinar Salud de Stock (Analizar cada talla)
       const stockTalla = Number(item.stock || 0);
+      const transitTalla = Number(item.transit || 0);
+      const cdTalla = Number(item.stock_cd || 0);
+
+      // Legacy Logic (Mantenemos esto para que el Modal siga funcionando igual)
       if (stockTalla === 0) groups[baseSku].hasZero = true;
       if (stockTalla === 1) groups[baseSku].hasOne = true;
+
+      // Smart Logic (Fase de Inteligencia)
+      if (stockTalla <= 1) {
+        const sizeName = getCleanSize(item.sku, sizeMap);
+        
+        if (transitTalla > 0) {
+          groups[baseSku].comingSizes.push(sizeName);
+        } else if (cdTalla > 0) {
+          groups[baseSku].requestSizes.push(sizeName);
+        } else {
+          groups[baseSku].outSizes.push(sizeName);
+        }
+      }
     });
 
     return Object.values(groups).map(group => {
-      let health = { texto: "🟢 COMPLETO", color: "text-green-600 bg-green-50" };
+      // 1. Estado Legacy para el Modal (No tocamos tipos ni lógica interna del modal)
       let status: StockStatus = 'COMPLETO';
       if (group.hasZero) {
-        health = { texto: "🔴 INCOMPLETO", color: "text-red-600 bg-red-50" };
         status = 'INCOMPLETO';
       } else if (group.hasOne) {
-        health = { texto: "🟡 QUEDA POCO", color: "text-yellow-600 bg-yellow-50" };
         status = 'QUEDA POCO';
       }
+
+      // 2. Estado Inteligente para la Tabla (Prioridad: Tránsito > CD > Agotado)
+      let health = { texto: "🟢 OK", color: "text-green-600 bg-green-50 border border-green-200" };
+      
+      const hasMissing = group.comingSizes.length > 0 || group.requestSizes.length > 0 || group.outSizes.length > 0;
+
+      if (hasMissing) {
+        const msgs: string[] = [];
+        if (group.comingSizes.length > 0) msgs.push(`Viene: ${group.comingSizes.join(', ')}`);
+        if (group.requestSizes.length > 0) msgs.push(`Pide: ${group.requestSizes.join(', ')}`);
+        if (group.outSizes.length > 0) {
+          msgs.push(msgs.length === 0 ? "Sin Stock Global" : `Agotado: ${group.outSizes.join(', ')}`);
+        }
+        
+        const finalText = msgs.join(' | ');
+
+        if (group.comingSizes.length > 0) health = { texto: "🚚 " + finalText, color: "text-orange-700 bg-orange-50 border border-orange-200" };
+        else if (group.requestSizes.length > 0) health = { texto: "🏭 " + finalText, color: "text-yellow-700 bg-yellow-50 border border-yellow-200" };
+        else health = { texto: "🔴 " + finalText, color: "text-red-700 bg-red-50 border border-red-200" };
+      }
+
       return { ...group, health, status };
     });
-  }, [data, productDictionary]);
+  }, [data, productDictionary, sizeMap]);
 
   return groupedData;
 };
