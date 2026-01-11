@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot, getDocs, writeBatch, doc, deleteDoc } from 'firebase/firestore';
 import { db } from './firebase-config';
+import { CartProvider } from './context/CartContext';
 import FileUpload from './components/FileUpload';
 import ProductSearch from './components/ProductSearch';
 import DashboardFilters from './components/Dashboard/DashboardFilters';
@@ -160,6 +161,7 @@ function App() {
   }
 
   return (
+    <CartProvider>
     <div className="flex h-screen w-full bg-red-600 overflow-hidden">
       {/* Sidebar */}
       <aside className="w-64 bg-slate-900 flex-shrink-0 flex flex-col h-full text-white border-r border-slate-800 shadow-xl z-20">
@@ -216,6 +218,7 @@ function App() {
         </div>
       </main>
     </div>
+    </CartProvider>
   );
 }
 

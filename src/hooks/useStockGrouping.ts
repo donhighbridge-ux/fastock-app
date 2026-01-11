@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import type { NormalizedRow, StockStatus } from '../types';
+import type { NormalizedRow, StockHealth, StockStatus } from '../types';
 import { getCleanSize } from '../utils/stockUtils';
 
 export const useStockGrouping = (data: NormalizedRow[], productDictionary: Record<string, string>, sizeMap: Record<string, string>) => {
@@ -19,7 +19,7 @@ export const useStockGrouping = (data: NormalizedRow[], productDictionary: Recor
       hasOne: boolean;
       comingSizes: string[];
       requestSizes: string[];
-      outSizes: string[];
+      deadSizes: string[];
     }> = {};
 
     data.forEach((item) => {
@@ -48,7 +48,7 @@ export const useStockGrouping = (data: NormalizedRow[], productDictionary: Recor
           hasOne: false,
           comingSizes: [],
           requestSizes: [],
-          outSizes: [],
+          deadSizes: [],
         };
       }
 
@@ -77,41 +77,38 @@ export const useStockGrouping = (data: NormalizedRow[], productDictionary: Recor
         } else if (cdTalla > 0) {
           groups[baseSku].requestSizes.push(sizeName);
         } else {
-          groups[baseSku].outSizes.push(sizeName);
+          groups[baseSku].deadSizes.push(sizeName);
         }
       }
     });
 
     return Object.values(groups).map(group => {
-      // 1. Estado Legacy para el Modal (No tocamos tipos ni lógica interna del modal)
-      let status: StockStatus = 'COMPLETO';
-      if (group.hasZero) {
-        status = 'INCOMPLETO';
-      } else if (group.hasOne) {
-        status = 'QUEDA POCO';
+      // 2. Estado Inteligente (Fase 2)
+      let status: StockStatus = 'STOCK OK';
+      let emoji = '🟢';
+
+      if (group.comingSizes.length > 0) {
+        status = 'EN TRÁNSITO';
+        emoji = '🟠';
+      } else if (group.requestSizes.length > 0) {
+        status = 'PIDE SOLO...';
+        emoji = '🟡';
+      } else if (group.deadSizes.length > 0) {
+        status = 'NADA EN EL CD';
+        emoji = '🔴';
       }
 
-      // 2. Estado Inteligente para la Tabla (Prioridad: Tránsito > CD > Agotado)
-      let health = { texto: "🟢 OK", color: "text-green-600 bg-green-50 border border-green-200" };
-      
-      const hasMissing = group.comingSizes.length > 0 || group.requestSizes.length > 0 || group.outSizes.length > 0;
-
-      if (hasMissing) {
-        const msgs: string[] = [];
-        if (group.comingSizes.length > 0) msgs.push(`Viene: ${group.comingSizes.join(', ')}`);
-        if (group.requestSizes.length > 0) msgs.push(`Pide: ${group.requestSizes.join(', ')}`);
-        if (group.outSizes.length > 0) {
-          msgs.push(msgs.length === 0 ? "Sin Stock Global" : `Agotado: ${group.outSizes.join(', ')}`);
+      const health: StockHealth = {
+        status,
+        emoji,
+        details: {
+          coming: group.comingSizes,
+          request: group.requestSizes,
+          dead: group.deadSizes
         }
-        
-        const finalText = msgs.join(' | ');
+      };
 
-        if (group.comingSizes.length > 0) health = { texto: "🚚 " + finalText, color: "text-orange-700 bg-orange-50 border border-orange-200" };
-        else if (group.requestSizes.length > 0) health = { texto: "🏭 " + finalText, color: "text-yellow-700 bg-yellow-50 border border-yellow-200" };
-        else health = { texto: "🔴 " + finalText, color: "text-red-700 bg-red-50 border border-red-200" };
-      }
-
-      return { ...group, health, status };
+      return { ...group, health };
     });
   }, [data, productDictionary, sizeMap]);
 

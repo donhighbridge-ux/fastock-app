@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import type { NormalizedRow, StockStatus } from '../types'; // Asegúrate de importar tus tipos reales si los tienes
+import type { NormalizedRow, StockHealth } from '../types'; // Asegúrate de importar tus tipos reales si los tienes
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase-config';
 import StockDetailModal from './StockDetailModal';
@@ -16,11 +16,11 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary }) => {
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
     variants: NormalizedRow[];
-    status: StockStatus;
+    health: StockHealth | null;
   }>({
     isOpen: false,
     variants: [],
-    status: 'COMPLETO',
+    health: null,
   });
 
   // Estado para el mapa de tallas dinámico
@@ -42,8 +42,8 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary }) => {
     fetchSizeMap();
   }, []);
 
-  const handleOpenModal = (baseSku: string, status: StockStatus) => {
-    console.log("🔘 [DEBUG] Click detectado. BaseSKU:", baseSku, "Status:", status);
+  const handleOpenModal = (baseSku: string, health: StockHealth) => {
+    console.log("🔘 [DEBUG] Click detectado. BaseSKU:", baseSku, "Health:", health);
 
     const variants = data.filter((item) => {
       const parts = item.sku.split('_');
@@ -53,7 +53,7 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary }) => {
 
     console.log("📊 [DEBUG] Variantes encontradas:", variants.length, variants);
 
-    setModalState({ isOpen: true, variants, status });
+    setModalState({ isOpen: true, variants, health });
   };
 
   const handleCloseModal = () => {
@@ -62,6 +62,17 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary }) => {
 
   // 1. EL CEREBRO: Lógica de Agrupación y Suma (Extraída a Hook)
   const groupedData = useStockGrouping(data, productDictionary, sizeMap);
+
+  // Helper para colores de la tabla
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'STOCK OK': return "text-green-600 bg-green-50 border border-green-200";
+      case 'EN TRÁNSITO': return "text-orange-700 bg-orange-50 border border-orange-200";
+      case 'PIDE SOLO...': return "text-yellow-700 bg-yellow-50 border border-yellow-200";
+      case 'NADA EN EL CD': return "text-red-700 bg-red-50 border border-red-200";
+      default: return "text-gray-600 bg-gray-50";
+    }
+  };
 
   // 2. LA CARA: Renderizado Visual
   if (!groupedData || groupedData.length === 0) {
@@ -93,7 +104,7 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary }) => {
                 Vta 2W
               </th>
               <th scope="col" className="px-3 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[120px]">
-                Salud Stock
+                Informe de Estado
               </th>
               <th scope="col" className="px-3 py-4 text-center text-xs font-bold text-purple-600 uppercase tracking-wider min-w-[80px]">
                 RA
@@ -143,14 +154,17 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary }) => {
                 </td>
 
                 {/* Columna Salud Stock (Nueva) */}
-                <td className="whitespace-nowrap px-2 py-4 text-center">
-                  <button
-                    onClick={() => handleOpenModal(group.baseSku, group.status)}
-                    className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer focus:outline-none shadow-sm transition-all hover:shadow-md max-w-[200px] truncate ${group.health.color}`}
-                    title={group.health.texto}
+                <td 
+                  className="whitespace-nowrap px-2 py-4 text-center cursor-pointer"
+                  style={{ cursor: 'pointer' }}
+                  onClick={() => handleOpenModal(group.baseSku, group.health)}
+                >
+                  <span
+                    className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer shadow-sm transition-all hover:shadow-md max-w-[200px] truncate ${getStatusColor(group.health.status)}`}
+                    title={group.health.status}
                   >
-                    {group.health.texto}
-                  </button>
+                    {group.health.emoji} {group.health.status}
+                  </span>
                 </td>
 
                 {/* Columna RA */}
@@ -187,7 +201,7 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary }) => {
         isOpen={modalState.isOpen}
         onClose={handleCloseModal}
         variants={modalState.variants}
-        status={modalState.status}
+        health={modalState.health}
         sizeMap={sizeMap}
       />
     </div>
