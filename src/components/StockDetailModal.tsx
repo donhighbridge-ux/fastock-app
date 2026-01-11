@@ -56,6 +56,32 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({ isOpen, onClose, va
   const renderSmartMessage = () => {
     const { status, details } = health;
 
+    // Bloque reutilizable para la solicitud (Botón Agregar)
+    const renderRequestBlock = () => {
+      if (details.request.length > 0) {
+        return (
+          <div className="bg-yellow-50 p-3 rounded border border-yellow-100 text-sm mt-2">
+            <p className="text-yellow-800 mb-2 font-medium">
+              {status === 'EN TRÁNSITO' 
+                ? `Noté que no te enviaron la ${details.request.join(', ')}.` 
+                : `Pide la ${details.request.join(', ')}.`}
+            </p>
+            <div className="flex items-center justify-between gap-3 mt-2">
+              <p className="text-gray-600 text-xs">Agrégame a la lista de Solicitud Stock. Yo me encargo de generar el Excel.</p>
+              <button 
+                onClick={() => handleAddToRequest(details.request)}
+                disabled={addedState === 'request'}
+                className={`px-4 py-2 rounded font-bold transition-colors shadow-sm text-sm ${addedState === 'request' ? 'bg-green-600 text-white cursor-default' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+              >
+                {addedState === 'request' ? '¡Agregado!' : 'Agregar'}
+              </button>
+            </div>
+          </div>
+        );
+      }
+      return null;
+    };
+
     switch (status) {
       case 'STOCK OK':
         return <p className="text-gray-700">No es necesario que pidas nada, tienes el stock completito.</p>;
@@ -72,37 +98,13 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({ isOpen, onClose, va
             {details.dead.length > 0 && (
               <p className="text-gray-600">No hay nada que hacer con la {details.dead.join(', ')}...</p>
             )}
-            {details.request.length > 0 && (
-              <div className="bg-yellow-50 p-3 rounded border border-yellow-100">
-                <p className="text-yellow-800 mb-2">Noté que no te enviaron la {details.request.join(', ')}.</p>
-                <button 
-                  onClick={() => handleAddToRequest(details.request)}
-                  disabled={addedState === 'request'}
-                  className={`w-full py-2 rounded font-bold transition-colors shadow-sm ${addedState === 'request' ? 'bg-green-600 text-white cursor-default' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
-                >
-                  {addedState === 'request' ? '¡Agregado!' : 'Agregar'}
-                </button>
-              </div>
-            )}
+            {renderRequestBlock()}
           </div>
         );
 
       case 'PIDE SOLO...':
-        return (
-          <div className="bg-yellow-50 p-3 rounded border border-yellow-100 text-sm">
-            <p className="text-yellow-800 mb-2 font-medium">Pide la {details.request.join(', ')}.</p>
-            <div className="flex items-center justify-between gap-3 mt-2">
-              <p className="text-gray-600 text-xs">Agrégame a la lista de Solicitud Stock. Yo me encargo de generar el Excel.</p>
-              <button 
-                onClick={() => handleAddToRequest(details.request)}
-                disabled={addedState === 'request'}
-                className={`px-4 py-2 rounded font-bold transition-colors shadow-sm text-sm ${addedState === 'request' ? 'bg-green-600 text-white cursor-default' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
-              >
-                {addedState === 'request' ? '¡Agregado!' : 'Agregar'}
-              </button>
-            </div>
-          </div>
-        );
+        return renderRequestBlock();
+
       default:
         return null;
     }
@@ -132,7 +134,7 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({ isOpen, onClose, va
           position: 'relative', 
           zIndex: 10000,
           width: '100%',        // <--- ESTO le dice: "ocupa espacio"
-          maxWidth: '400px',    // <--- ESTO es el freno de mano. Aquí decides el ancho.
+          maxWidth: '600px',    // <--- ESTO es el freno de mano. Aquí decides el ancho.
           borderRadius: '10px'  // <--- Un extra para que se vea bonito
         }}
       >

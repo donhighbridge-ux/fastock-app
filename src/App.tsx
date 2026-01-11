@@ -1,22 +1,84 @@
 import React, { useState, useEffect } from 'react';
 import { collection, onSnapshot, getDocs, writeBatch, doc, deleteDoc } from 'firebase/firestore';
 import { db } from './firebase-config';
-import { CartProvider } from './context/CartContext';
+import { CartProvider, useCart } from './context/CartContext';
 import FileUpload from './components/FileUpload';
 import ProductSearch from './components/ProductSearch';
 import DashboardFilters from './components/Dashboard/DashboardFilters';
 import StockTable from './components/StockTable';
+import RequestCartView from './components/RequestCartView';
+import TrackingListView from './components/TrackingListView';
 import type { NormalizedRow } from './types';
 import './App.css';
 
 const ORGANIZATION_ID = "demo_org_v1";
+
+const Sidebar = ({ currentView, setCurrentView }: { currentView: 'dashboard' | 'upload' | 'cart' | 'tracking', setCurrentView: (t: 'dashboard' | 'upload' | 'cart' | 'tracking') => void }) => {
+  const { requestList, trackingList } = useCart();
+
+  return (
+    <aside className="w-64 bg-slate-900 flex-shrink-0 flex flex-col h-full text-white border-r border-slate-800 shadow-xl z-20">
+      <div className="p-6">
+        <h1 className="text-2xl font-bold">FASTock Admin</h1>
+      </div>
+      <nav className="flex-1 px-4 space-y-2">
+        <button
+          onClick={() => setCurrentView('dashboard')}
+          className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
+            currentView === 'dashboard' ? 'bg-slate-800 text-white' : 'text-gray-400 hover:bg-slate-800 hover:text-white'
+          }`}
+        >
+          📊 Tablero
+        </button>
+        <button
+          onClick={() => setCurrentView('upload')}
+          className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
+            currentView === 'upload' ? 'bg-slate-800 text-white' : 'text-gray-400 hover:bg-slate-800 hover:text-white'
+          }`}
+        >
+          📤 Carga de Datos
+        </button>
+
+        {/* Solicitud (Carrito) */}
+        <button
+          onClick={() => setCurrentView('cart')}
+          className={`w-full text-left px-4 py-3 rounded-lg transition-colors flex justify-between items-center ${
+            currentView === 'cart' ? 'bg-slate-800 text-white' : 'text-gray-400 hover:bg-slate-800 hover:text-white'
+          }`}
+        >
+          <span className="flex items-center gap-2">🛒 Solicitud</span>
+          {requestList.length > 0 && (
+            <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
+              {requestList.length}
+            </span>
+          )}
+        </button>
+
+        {/* Seguimiento */}
+        <button
+          onClick={() => setCurrentView('tracking')}
+          className={`w-full text-left px-4 py-3 rounded-lg transition-colors flex justify-between items-center ${
+            currentView === 'tracking' ? 'bg-slate-800 text-white' : 'text-gray-400 hover:bg-slate-800 hover:text-white'
+          }`}
+        >
+          <span className="flex items-center gap-2">👁️ Seguimiento</span>
+          {trackingList.length > 0 && (
+            <span className="bg-blue-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
+              {trackingList.length}
+            </span>
+          )}
+        </button>
+      </nav>
+    </aside>
+  );
+};
 
 function App() {
     const [data, setData] = useState<NormalizedRow[]>([]);
   const [filteredData, setFilteredData] = useState<NormalizedRow[]>(data);
   const [isLoading, setIsLoading] = useState(true);
   const [productDictionary, setProductDictionary] = useState<Record<string, string>>({});
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'upload'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'upload' | 'cart' | 'tracking'>('dashboard');
   const [currentFilters, setCurrentFilters] = useState<{
     marca: string | null;
     tienda: string | null;
@@ -164,34 +226,12 @@ function App() {
     <CartProvider>
     <div className="flex h-screen w-full bg-red-600 overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-64 bg-slate-900 flex-shrink-0 flex flex-col h-full text-white border-r border-slate-800 shadow-xl z-20">
-        <div className="p-6">
-          <h1 className="text-2xl font-bold">FASTock Admin</h1>
-        </div>
-        <nav className="flex-1 px-4 space-y-2">
-          <button
-            onClick={() => setActiveTab('dashboard')}
-            className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
-              activeTab === 'dashboard' ? 'bg-slate-800 text-white' : 'text-gray-400 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            📊 Tablero
-          </button>
-          <button
-            onClick={() => setActiveTab('upload')}
-            className={`w-full text-left px-4 py-3 rounded-lg transition-colors ${
-              activeTab === 'upload' ? 'bg-slate-800 text-white' : 'text-gray-400 hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            📤 Carga de Datos
-          </button>
-        </nav>
-      </aside>
+      <Sidebar currentView={currentView} setCurrentView={setCurrentView} />
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
         <div className="flex-1 overflow-y-auto p-8">
-          {activeTab === 'dashboard' ? (
+          {currentView === 'dashboard' && (
             <>
               <h2 className="text-2xl font-bold mb-4 text-gray-800 ml-[52px]">Tablero de Control</h2>
               <DashboardFilters 
@@ -204,7 +244,9 @@ function App() {
                 <StockTable data={filteredData} productDictionary={productDictionary} />
               </div>
             </>
-          ) : (
+          )}
+
+          {currentView === 'upload' && (
             <div className="max-w-3xl mx-auto mt-10">
               <div className="mb-6 text-center">
                 <h2 className="text-3xl font-bold text-gray-800">Centro de Carga</h2>
@@ -213,6 +255,20 @@ function App() {
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
                 <FileUpload onUpload={handleFileUpload} organizationId={ORGANIZATION_ID} />
               </div>
+            </div>
+          )}
+
+          {currentView === 'cart' && (
+            <div className="max-w-7xl mx-auto mt-4">
+              <h2 className="text-2xl font-bold mb-6 text-gray-800">Carrito de Solicitud</h2>
+              <RequestCartView />
+            </div>
+          )}
+
+          {currentView === 'tracking' && (
+            <div className="max-w-7xl mx-auto mt-4">
+              <h2 className="text-2xl font-bold mb-6 text-gray-800">Lista de Seguimiento</h2>
+              <TrackingListView currentData={data} />
             </div>
           )}
         </div>
