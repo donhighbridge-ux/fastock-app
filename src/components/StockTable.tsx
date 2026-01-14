@@ -4,6 +4,8 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase-config';
 import StockDetailModal from './StockDetailModal';
 import { useStockGrouping } from '../hooks/useStockGrouping';
+import SimpleMetricModal from './SimpleMetricModal';
+import { getCleanSize } from '../utils/stockUtils';
 
 // Definimos qué espera recibir este componente
 interface StockTableProps {
@@ -22,6 +24,16 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary }) => {
     variants: [],
     health: null,
   });
+
+  const [metricModal, setMetricModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    sku: string;
+    metricLabel: string;
+    data: { size: string; value: number }[];
+  } | null>(null);
+
+  console.log("🔄 [DEBUG] Render StockTable. MetricModal State:", metricModal);
 
   // Estado para el mapa de tallas dinámico
   const [sizeMap, setSizeMap] = useState<Record<string, string>>({});
@@ -58,6 +70,56 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary }) => {
 
   const handleCloseModal = () => {
     setModalState((prev) => ({ ...prev, isOpen: false }));
+  };
+
+  const handleStockClick = (e: React.MouseEvent, group: any) => {
+    e.stopPropagation();
+    console.log("🔘 [DEBUG] Click Stock recibido. Group:", group);
+    const variants = data.filter((item) => {
+      const parts = item.sku.split('_');
+      const itemBaseSku = parts.length >= 2 ? parts.slice(0, 2).join('_').toLowerCase() : item.sku.toLowerCase();
+      return itemBaseSku === group.baseSku;
+    });
+
+    const metricData = variants
+      .map(v => ({
+        size: getCleanSize(v.sku, sizeMap),
+        value: Number(v.stock) || 0
+      }))
+      .sort((a, b) => a.size.localeCompare(b.size, undefined, { numeric: true }));
+
+    setMetricModal({
+      isOpen: true,
+      title: group.name,
+      sku: group.baseSku,
+      metricLabel: "Stock en Tienda",
+      data: metricData
+    });
+  };
+
+  const handleSalesClick = (e: React.MouseEvent, group: any) => {
+    e.stopPropagation();
+    console.log("🔘 [DEBUG] Click Ventas recibido. Group:", group);
+    const variants = data.filter((item) => {
+      const parts = item.sku.split('_');
+      const itemBaseSku = parts.length >= 2 ? parts.slice(0, 2).join('_').toLowerCase() : item.sku.toLowerCase();
+      return itemBaseSku === group.baseSku;
+    });
+
+    const metricData = variants
+      .map(v => ({
+        size: getCleanSize(v.sku, sizeMap),
+        value: Number(v.sales2w) || 0
+      }))
+      .sort((a, b) => a.size.localeCompare(b.size, undefined, { numeric: true }));
+
+    setMetricModal({
+      isOpen: true,
+      title: group.name,
+      sku: group.baseSku,
+      metricLabel: "Ventas 2 Semanas",
+      data: metricData
+    });
   };
 
   // 1. EL CEREBRO: Lógica de Agrupación y Suma (Extraída a Hook)
@@ -141,14 +203,20 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary }) => {
 
                 {/* 3. Columna Stock: El dato Estrella. Grande y claro. */}
                 <td className="whitespace-nowrap px-2 py-4 text-center">
-                  <span className={`text-xs font-bold cursor-pointer hover:bg-gray-50 px-2 py-1 rounded ${group.stock > 0 ? 'text-blue-700' : 'text-red-400'}`}>
+                  <span 
+                    onClick={(e) => handleStockClick(e, group)}
+                    className={`text-xs font-bold cursor-pointer hover:text-blue-600 underline decoration-dotted underline-offset-2 px-2 py-1 rounded ${group.stock > 0 ? 'text-blue-700' : 'text-red-400'}`}
+                  >
                     {group.stock}
                   </span>
                 </td>
 
                 {/* Columna Venta 2W */}
                 <td className="whitespace-nowrap px-2 py-4 text-center">
-                  <span className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-full cursor-pointer hover:bg-gray-50">
+                  <span 
+                    onClick={(e) => handleSalesClick(e, group)}
+                    className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-full cursor-pointer hover:text-blue-800 underline decoration-dotted underline-offset-2"
+                  >
                     {group.sales2w}
                   </span>
                 </td>
@@ -204,6 +272,17 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary }) => {
         health={modalState.health}
         sizeMap={sizeMap}
       />
+
+      {metricModal && (
+        <SimpleMetricModal
+          isOpen={metricModal.isOpen}
+          onClose={() => setMetricModal(null)}
+          title={metricModal.title}
+          sku={metricModal.sku}
+          metricLabel={metricModal.metricLabel}
+          data={metricModal.data}
+        />
+      )}
     </div>
   );
 };
