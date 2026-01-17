@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { collection, onSnapshot, getDocs, writeBatch, doc, deleteDoc } from 'firebase/firestore';
 import { db } from './firebase-config';
 import { CartProvider, useCart } from './context/CartContext';
@@ -12,6 +12,56 @@ import type { NormalizedRow } from './types';
 import './App.css';
 
 const ORGANIZATION_ID = "demo_org_v1";
+const ALL_STORES_OPTION = "Todas las Tiendas";
+
+// --- COMPONENTE DE BIENVENIDA (Onboarding) ---
+interface WelcomeScreenProps {
+  step: 'brand' | 'store';
+  options: string[];
+  onSelect: (val: string) => void;
+  onBack?: () => void;
+  instruction: string;
+}
+
+const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ step, options, onSelect, onBack, instruction }) => {
+  return (
+    <div className="flex flex-col justify-center items-center h-[70vh] relative animate-fade-in">
+      {/* Botón Volver (Solo en paso Tienda) */}
+      {step === 'store' && onBack && (
+        <button
+          onClick={onBack}
+          className="absolute top-0 left-0 p-4 text-gray-400 hover:text-gray-600 transition-colors flex items-center gap-2 group"
+        >
+          <span className="group-hover:-translate-x-1 transition-transform">←</span>
+          <span className="text-sm font-medium">Volver a Marcas</span>
+        </button>
+      )}
+
+      {/* Encabezado */}
+      <h1 className="text-4xl font-bold text-gray-800 mb-12 tracking-tight">Bienvenido a FASTock</h1>
+
+      {/* Contenedor del Selector */}
+      <div className="w-full max-w-md flex flex-col items-center gap-6">
+        <p className="text-xl font-bold text-slate-900 text-center">{instruction}</p>
+
+        <select
+          className="w-72 px-4 py-3 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-700 appearance-none cursor-pointer text-center text-base font-medium hover:border-blue-400 transition-colors"
+          onChange={(e) => e.target.value && onSelect(e.target.value)}
+          defaultValue=""
+        >
+          <option value="" disabled>Seleccionar...</option>
+          {options.map(opt => (
+            <option key={opt} value={opt}>{opt}</option>
+          ))}
+        </select>
+        
+        <div className="text-xs text-gray-400 mt-2">
+          {options.length} opciones disponibles
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const Sidebar = ({ currentView, setCurrentView }: { currentView: 'dashboard' | 'upload' | 'cart' | 'tracking', setCurrentView: (t: 'dashboard' | 'upload' | 'cart' | 'tracking') => void }) => {
   const { requestList, trackingList } = useCart();
@@ -195,15 +245,43 @@ function App() {
     }
   };
 
+  // --- Lógica de Onboarding y Filtros ---
+
+  // 1. Obtener Marcas Únicas
+  const uniqueBrands = useMemo(() => {
+    return Array.from(new Set(data.map(item => item.marca))).filter(Boolean).sort();
+  }, [data]);
+
+  // 2. Obtener Tiendas Únicas (Filtradas por Marca)
+  const uniqueStores = useMemo(() => {
+    if (!currentFilters.marca) return [];
+    const stores = Array.from(new Set(data
+      .filter(item => item.marca === currentFilters.marca)
+      .map(item => item.tiendaNombre)
+    )).filter(Boolean).sort();
+    return [ALL_STORES_OPTION, ...stores]; // Agregamos siempre la opción "Todas"
+  }, [data, currentFilters.marca]);
+
   const handleFilterChange = (filters: { marca: string | null; tienda: string | null; area: string | null; categoria: string | null }) => {
-    // Apply cascading filters
-    setCurrentFilters(filters);
+    // BUG FIX #3: Evitar "Kickback" a la pantalla de bienvenida al cambiar filtros en el Dashboard.
+    // Si hay marca seleccionada pero la tienda se reinició (null/undefined), forzamos "Todas las Tiendas".
+    const safeFilters = { ...filters };
+    if (safeFilters.marca && !safeFilters.tienda) {
+      safeFilters.tienda = ALL_STORES_OPTION;
+    }
+
+    setCurrentFilters(safeFilters);
+    
     let newData = [...data];
 
-    if (filters.marca) newData = newData.filter(item => item.marca === filters.marca);
-    if (filters.tienda) newData = newData.filter(item => item.tiendaNombre === filters.tienda);
-    if (filters.area) newData = newData.filter(item => item.area === filters.area);
-    if (filters.categoria) newData = newData.filter(item => item.categoria === filters.categoria);
+    if (safeFilters.marca) newData = newData.filter(item => item.marca === safeFilters.marca);
+    
+    // CRÍTICO: Si es "Todas las Tiendas", NO filtramos por tienda, dejamos pasar todas las de la marca.
+    if (safeFilters.tienda && safeFilters.tienda !== ALL_STORES_OPTION) {
+      newData = newData.filter(item => item.tiendaNombre === safeFilters.tienda);
+    }
+    if (safeFilters.area) newData = newData.filter(item => item.area === safeFilters.area);
+    if (safeFilters.categoria) newData = newData.filter(item => item.categoria === safeFilters.categoria);
 
     setFilteredData(newData);
   };
@@ -233,16 +311,59 @@ function App() {
         <div className="flex-1 overflow-y-auto p-8">
           {currentView === 'dashboard' && (
             <>
-              <h2 className="text-2xl font-bold mb-4 text-gray-800 ml-[52px]">Tablero de Control</h2>
-              <DashboardFilters 
-                data={data} 
-                onFilter={handleFilterChange} 
-                onSearch={handleSearch} 
-                selectedFilters={currentFilters} 
-              />
-              <div className="min-h-[500px] transition-all duration-300">
-                <StockTable data={filteredData} productDictionary={productDictionary} />
-              </div>
+              {/* ESTADO CERO: Sin Datos */}
+              {data.length === 0 && !isLoading ? (
+                <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 text-center">
+                  <div className="bg-gray-100 p-6 rounded-full">
+                    <span className="text-4xl">📂</span>
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-bold text-gray-800">No hay datos cargados</h2>
+                    <p className="text-gray-500 mt-2">Sube tu planilla de stock para comenzar a trabajar.</p>
+                  </div>
+                  <button 
+                    onClick={() => setCurrentView('upload')}
+                    className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors shadow-lg hover:scale-105 transform duration-200"
+                  >
+                    Ir a Carga de Datos
+                  </button>
+                </div>
+              ) : !currentFilters.marca ? (
+                /* ESTADO UNO: Selección de Marca */
+                <WelcomeScreen 
+                  step="brand"
+                  instruction="Selecciona Una Marca Para Comenzar"
+                  options={uniqueBrands}
+                  onSelect={(brand) => handleFilterChange({ ...currentFilters, marca: brand })}
+                />
+              ) : !currentFilters.tienda ? (
+                /* ESTADO DOS: Selección de Tienda */
+                <WelcomeScreen 
+                  step="store"
+                  instruction="Selecciona Una Tienda Para Continuar"
+                  options={uniqueStores}
+                  onSelect={(store) => handleFilterChange({ ...currentFilters, tienda: store })}
+                  onBack={() => handleFilterChange({ ...currentFilters, marca: null })}
+                />
+              ) : (
+                /* ESTADO TRES: El Dashboard (Solo si hay tienda seleccionada) */
+                <>
+                  <h2 className="text-2xl font-bold mb-4 text-gray-800 ml-[52px]">Tablero de Control</h2>
+                  <DashboardFilters 
+                    data={data} 
+                    onFilter={handleFilterChange} 
+                    onSearch={handleSearch} 
+                    selectedFilters={currentFilters} 
+                  />
+                  <div className="min-h-[500px] transition-all duration-300">
+                    <StockTable 
+                      data={filteredData} 
+                      productDictionary={productDictionary} 
+                      isMultiStore={currentFilters.tienda === ALL_STORES_OPTION}
+                    />
+                  </div>
+                </>
+              )}
             </>
           )}
 

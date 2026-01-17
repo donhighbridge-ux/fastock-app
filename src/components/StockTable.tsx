@@ -11,9 +11,10 @@ import { getCleanSize } from '../utils/stockUtils';
 interface StockTableProps {
   data: NormalizedRow[];
   productDictionary: Record<string, string>; // Recibimos el diccionario desde App.tsx
+  isMultiStore?: boolean;
 }
 
-const StockTable: React.FC<StockTableProps> = ({ data, productDictionary }) => {
+const StockTable: React.FC<StockTableProps> = ({ data, productDictionary, isMultiStore = false }) => {
   
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
@@ -31,6 +32,8 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary }) => {
     sku: string;
     metricLabel: string;
     data: { size: string; value: number }[];
+    isAggregatedView?: boolean;
+    aggregatedData?: { store: string; total: number; sizes: { size: string; value: number }[] }[];
   } | null>(null);
 
   console.log("🔄 [DEBUG] Render StockTable. MetricModal State:", metricModal);
@@ -81,20 +84,54 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary }) => {
       return itemBaseSku === group.baseSku;
     });
 
-    const metricData = variants
-      .map(v => ({
-        size: getCleanSize(v.sku, sizeMap),
-        value: Number(v.stock) || 0
-      }))
-      .sort((a, b) => a.size.localeCompare(b.size, undefined, { numeric: true }));
+    if (isMultiStore) {
+      // Lógica para "Todas las Tiendas": Agrupar por tienda
+      const storesMap = new Map<string, { size: string; value: number }[]>();
+      
+      variants.forEach(v => {
+        const size = getCleanSize(v.sku, sizeMap);
+        const val = Number(v.stock) || 0;
+        if (val > 0) { // Solo tiendas con stock
+          if (!storesMap.has(v.tiendaNombre)) {
+            storesMap.set(v.tiendaNombre, []);
+          }
+          storesMap.get(v.tiendaNombre)?.push({ size, value: val });
+        }
+      });
 
-    setMetricModal({
-      isOpen: true,
-      title: group.name,
-      sku: group.baseSku,
-      metricLabel: "Stock en Tienda",
-      data: metricData
-    });
+      const aggregatedData = Array.from(storesMap.entries()).map(([store, sizes]) => ({
+        store,
+        total: sizes.reduce((acc, curr) => acc + curr.value, 0),
+        sizes: sizes.sort((a, b) => a.size.localeCompare(b.size, undefined, { numeric: true }))
+      })).sort((a, b) => b.total - a.total); // Ordenar tiendas por stock total descendente
+
+      setMetricModal({
+        isOpen: true,
+        title: group.name,
+        sku: group.baseSku,
+        metricLabel: "Stock Global",
+        data: [], // No se usa en modo agregado
+        isAggregatedView: true,
+        aggregatedData: aggregatedData
+      });
+    } else {
+      // Lógica original para Tienda Única
+      const metricData = variants
+        .map(v => ({
+          size: getCleanSize(v.sku, sizeMap),
+          value: Number(v.stock) || 0
+        }))
+        .sort((a, b) => a.size.localeCompare(b.size, undefined, { numeric: true }));
+
+      setMetricModal({
+        isOpen: true,
+        title: group.name,
+        sku: group.baseSku,
+        metricLabel: "Stock en Tienda",
+        data: metricData,
+        isAggregatedView: false
+      });
+    }
   };
 
   const handleSalesClick = (e: React.MouseEvent, group: any) => {
@@ -106,20 +143,53 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary }) => {
       return itemBaseSku === group.baseSku;
     });
 
-    const metricData = variants
-      .map(v => ({
-        size: getCleanSize(v.sku, sizeMap),
-        value: Number(v.sales2w) || 0
-      }))
-      .sort((a, b) => a.size.localeCompare(b.size, undefined, { numeric: true }));
+    if (isMultiStore) {
+      // Lógica para "Todas las Tiendas": Agrupar por tienda (Ventas)
+      const storesMap = new Map<string, { size: string; value: number }[]>();
+      
+      variants.forEach(v => {
+        const size = getCleanSize(v.sku, sizeMap);
+        const val = Number(v.sales2w) || 0; // Usamos sales2w
+        if (val > 0) {
+          if (!storesMap.has(v.tiendaNombre)) {
+            storesMap.set(v.tiendaNombre, []);
+          }
+          storesMap.get(v.tiendaNombre)?.push({ size, value: val });
+        }
+      });
 
-    setMetricModal({
-      isOpen: true,
-      title: group.name,
-      sku: group.baseSku,
-      metricLabel: "Ventas 2 Semanas",
-      data: metricData
-    });
+      const aggregatedData = Array.from(storesMap.entries()).map(([store, sizes]) => ({
+        store,
+        total: sizes.reduce((acc, curr) => acc + curr.value, 0),
+        sizes: sizes.sort((a, b) => a.size.localeCompare(b.size, undefined, { numeric: true }))
+      })).sort((a, b) => b.total - a.total);
+
+      setMetricModal({
+        isOpen: true,
+        title: group.name,
+        sku: group.baseSku,
+        metricLabel: "Ventas Globales 2W",
+        data: [],
+        isAggregatedView: true,
+        aggregatedData: aggregatedData
+      });
+    } else {
+      const metricData = variants
+        .map(v => ({
+          size: getCleanSize(v.sku, sizeMap),
+          value: Number(v.sales2w) || 0
+        }))
+        .sort((a, b) => a.size.localeCompare(b.size, undefined, { numeric: true }));
+
+      setMetricModal({
+        isOpen: true,
+        title: group.name,
+        sku: group.baseSku,
+        metricLabel: "Ventas 2 Semanas",
+        data: metricData,
+        isAggregatedView: false
+      });
+    }
   };
 
   // 1. EL CEREBRO: Lógica de Agrupación y Suma (Extraída a Hook)
@@ -281,6 +351,8 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary }) => {
           sku={metricModal.sku}
           metricLabel={metricModal.metricLabel}
           data={metricModal.data}
+          isAggregatedView={metricModal.isAggregatedView}
+          aggregatedData={metricModal.aggregatedData}
         />
       )}
     </div>
