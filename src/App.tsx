@@ -9,6 +9,7 @@ import StockTable from './components/StockTable';
 import RequestCartView from './components/RequestCartView';
 import TrackingListView from './components/TrackingListView';
 import type { NormalizedRow } from './types';
+import NotificationBell from './components/NotificationBell';
 import './App.css';
 
 const ORGANIZATION_ID = "demo_org_v1";
@@ -142,6 +143,8 @@ function App() {
   
   // NUEVO ESTADO (La Memoria): Controla si el usuario ya ingresó al Dashboard
   const [isDashboardActive, setIsDashboardActive] = useState(false);
+  const [currentSearchTerm, setCurrentSearchTerm] = useState('');
+  const [trackingNotification, setTrackingNotification] = useState<number | null>(null);
 
   // Función para obtener datos de stock (Persistencia al recargar)
   const fetchStockData = async () => {
@@ -205,48 +208,113 @@ function App() {
     };
   }, []);
 
-  const handleFileUpload = async (normalizedData: NormalizedRow[], type: string) => {
+  // --- Lógica de Notificación Inteligente ---
+  const checkForTrackingUpdates = (newData: NormalizedRow[]) => {
+    try {
+      // Intentamos leer la lista de seguimiento del localStorage
+      // Asumimos que el CartContext persiste la lista bajo la clave 'trackingList'
+      const storedTracking = localStorage.getItem('trackingList');
+      if (!storedTracking) return;
+
+      const trackingList = JSON.parse(storedTracking) as { sku: string }[];
+      let updatesCount = 0;
+
+      trackingList.forEach(trackedItem => {
+        // Lógica de Cruce: Buscar variantes en la nueva data
+        const variants = newData.filter(d => {
+          const parts = d.sku.split('_');
+          const base = parts.length >= 2 ? parts.slice(0, 2).join('_').toLowerCase() : d.sku.toLowerCase();
+          return base === trackedItem.sku.toLowerCase();
+        });
+
+        const totalCD = variants.reduce((sum, v) => sum + (Number(v.stock_cd) || 0), 0);
+        const totalTransit = variants.reduce((sum, v) => sum + (Number(v.transit) || 0), 0);
+
+        if (totalCD > 0 || totalTransit > 0) {
+          updatesCount++;
+        }
+      });
+
+      setTrackingNotification(updatesCount > 0 ? updatesCount : null);
+    } catch (error) {
+      console.error("Error al verificar actualizaciones de seguimiento:", error);
+    }
+  };
+
+const handleFileUpload = async (normalizedData: NormalizedRow[], type: string) => {
     setIsLoading(true);
     try {
-      // Determinamos la colección destino. Usamos 'product_dictionary' para coincidir con la lectura.
       const collectionName = type === 'stock' ? 'stock' : 'product_dictionary';
       const collectionRef = collection(db, "organizations", ORGANIZATION_ID, collectionName);
       
-      // 1. Limpieza previa (Borrar colección antigua para evitar duplicados/fantasmas)
-      const q = await getDocs(collectionRef);
-      const batchDelete = writeBatch(db);
-      q.forEach((doc) => batchDelete.delete(doc.ref));
-      await batchDelete.commit();
+      // CONFIGURACIÓN DE SEGURIDAD (La que definimos hace meses)
+      const BATCH_SIZE = 400; // Bajamos de 500 a 400 para evitar errores de tamaño/timeout
+      const DELAY_MS = 50;    // Pequeña pausa para no saturar el ancho de banda
+      
+      // =================================================================
+      // 1. LIMPIEZA PREVIA INTELIGENTE (BORRADO POR LOTES)
+      // =================================================================
+      console.log("🧹 Iniciando limpieza de datos antiguos...");
+      const snapshot = await getDocs(collectionRef);
+      const totalDocsToDelete = snapshot.docs.length;
+      
+      if (totalDocsToDelete > 0) {
+        // Dividimos los documentos a borrar en chunks
+        const deleteChunks = [];
+        for (let i = 0; i < totalDocsToDelete; i += BATCH_SIZE) {
+          deleteChunks.push(snapshot.docs.slice(i, i + BATCH_SIZE));
+        }
 
-      // 2. Escritura por lotes (Batches de 500, límite de Firestore)
-      const batchSize = 500;
+        let deletedCount = 0;
+        for (const chunk of deleteChunks) {
+          const batchDelete = writeBatch(db);
+          chunk.forEach((doc) => batchDelete.delete(doc.ref));
+          await batchDelete.commit();
+          
+          deletedCount += chunk.length;
+          console.log(`🗑️ Borrados ${deletedCount}/${totalDocsToDelete} registros antiguos.`);
+          // Pequeña pausa para respirar
+          await new Promise(resolve => setTimeout(resolve, DELAY_MS));
+        }
+      }
+
+      // =================================================================
+      // 2. ESCRITURA POR LOTES (SUBIDA CONTROLADA)
+      // =================================================================
+      console.log(`🚀 Iniciando carga de ${normalizedData.length} nuevos registros...`);
       let totalUploaded = 0;
 
-      for (let i = 0; i < normalizedData.length; i += batchSize) {
+      for (let i = 0; i < normalizedData.length; i += BATCH_SIZE) {
         const batch = writeBatch(db);
-        const chunk = normalizedData.slice(i, i + batchSize);
+        const chunk = normalizedData.slice(i, i + BATCH_SIZE);
+        
         chunk.forEach((row) => {
-          const docRef = doc(collectionRef); // ID automático
+          const docRef = doc(collectionRef); 
           batch.set(docRef, row);
         });
-        await batch.commit();
 
+        await batch.commit();
+        
         totalUploaded += chunk.length;
         const porcentaje = Math.round((totalUploaded / normalizedData.length) * 100);
         console.log(`⏳ Subiendo... ${totalUploaded}/${normalizedData.length} filas (${porcentaje}%).`);
+        
+        // Pausa anti-saturación
+        await new Promise(resolve => setTimeout(resolve, DELAY_MS));
       }
 
-      // 3. Actualizar Estado Local (Solo si es stock, para reflejar cambios inmediatos en la tabla)
+      // 3. ACTUALIZAR ESTADO LOCAL
       if (type === 'stock') {
         setData(normalizedData);
         setFilteredData(normalizedData);
+        checkForTrackingUpdates(normalizedData);
       }
-      console.log(`✅ PROCESO FINALIZADO:`);
-      console.log(`   - Filas recibidas del Excel: ${normalizedData.length}`);
-      console.log(`   - Documentos creados en Firebase: ${totalUploaded}`);
-      console.log(normalizedData.length === totalUploaded ? "   🌟 MATCH PERFECTO" : "   ⚠️ ALERTA: Diferencia de filas detectada");
+      
+      console.log(`✅ PROCESO FINALIZADO CON ÉXITO.`);
+
     } catch (error) {
-      console.error("❌ Error al guardar en Firebase:", error);
+      console.error("❌ Error CRÍTICO al guardar en Firebase:", error);
+      alert("Hubo un error al subir los datos. Revisa la consola para más detalles.");
     } finally {
       setIsLoading(false);
     }
@@ -275,18 +343,25 @@ function App() {
 
     let source = data.filter(d => d.marca === currentFilters.marca);
 
+    // Filtro base por Tienda (si aplica)
     if (currentFilters.tienda && currentFilters.tienda !== ALL_STORES_ID) {
       source = source.filter(d => d.tiendaNombre === currentFilters.tienda);
     }
 
+    // Para categorías, aplicamos un filtro adicional por Área si está seleccionada (Cascada)
+    let categorySource = source;
+    if (currentFilters.area) {
+      categorySource = source.filter(d => d.area === currentFilters.area);
+    }
+
     return {
       areas: Array.from(new Set(source.map(i => i.area))).filter(Boolean).sort(),
-      categories: Array.from(new Set(source.map(i => i.categoria))).filter(Boolean).sort()
+      categories: Array.from(new Set(categorySource.map(i => i.categoria))).filter(Boolean).sort()
     };
-  }, [data, currentFilters.marca, currentFilters.tienda]);
+  }, [data, currentFilters.marca, currentFilters.tienda, currentFilters.area]);
 
-  const handleFilterChange = (filters: { marca: string | null; tienda: string | null; area: string | null; categoria: string | null }) => {
-    const safeFilters = { ...filters };
+  const handleFilterChange = (filters: Partial<{ marca: string | null; tienda: string | null; area: string | null; categoria: string | null }>) => {
+    const safeFilters = { ...currentFilters, ...filters };
     
     // 1. LIMPIEZA DE "TODAS LAS TIENDAS" (String -> ID Lógico)
     // Atrapamos el objeto, el string literal o el ID 'all'
@@ -346,6 +421,7 @@ function App() {
   };
 
   const handleSearch = (searchTerm: string) => {
+    setCurrentSearchTerm(searchTerm);
     const searchTermLower = searchTerm.toLowerCase();
     const newData = data.filter(item => item.sku.toLowerCase().includes(searchTermLower) || item.description.toLowerCase().includes(searchTermLower));
     setFilteredData(newData);
@@ -367,6 +443,14 @@ function App() {
 
       {/* Main Content */}
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
+        {/* Header Flotante para Notificaciones */}
+        <div className="absolute top-6 right-8 z-30">
+           <NotificationBell 
+             count={trackingNotification} 
+             onClick={() => setCurrentView('tracking')} 
+           />
+        </div>
+
         <div className="flex-1 overflow-y-auto p-8">
           {currentView === 'dashboard' && (
             <>
@@ -424,6 +508,7 @@ function App() {
                       data={filteredData} 
                       productDictionary={productDictionary} 
                       isMultiStore={currentFilters.tienda === ALL_STORES_ID}
+                      searchTerm={currentSearchTerm}
                     />
                   </div>
                 </>

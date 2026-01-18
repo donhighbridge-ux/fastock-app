@@ -9,7 +9,7 @@ interface SimpleMetricModalProps {
   metricLabel: string;
   data: { size: string; value: number }[]; // Fallback for single store
   isAggregatedView?: boolean;
-  aggregatedData?: { store: string; total: number; sizes: { size: string; value: number }[] }[];
+  aggregatedData?: { store: string; total: number | string; sizes: { size: string; value: number }[]; statusColor?: string; feedbackMessage?: string }[];
 }
 
 const SimpleMetricModal: React.FC<SimpleMetricModalProps> = ({
@@ -23,7 +23,7 @@ const SimpleMetricModal: React.FC<SimpleMetricModalProps> = ({
   aggregatedData = [],
 }) => {
   const [view, setView] = useState<'list' | 'detail'>('list');
-  const [selectedStoreData, setSelectedStoreData] = useState<{ store: string; sizes: { size: string; value: number }[] } | null>(null);
+  const [selectedStoreData, setSelectedStoreData] = useState<{ store: string; sizes: { size: string; value: number }[]; feedbackMessage?: string } | null>(null);
 
   // Reset view when modal opens/closes
   useEffect(() => {
@@ -90,19 +90,27 @@ const SimpleMetricModal: React.FC<SimpleMetricModalProps> = ({
                   <div 
                     key={idx} 
                     onClick={() => {
-                      setSelectedStoreData({ store: storeInfo.store, sizes: storeInfo.sizes });
+                      setSelectedStoreData({ store: storeInfo.store, sizes: storeInfo.sizes, feedbackMessage: storeInfo.feedbackMessage });
                       setView('detail');
                     }}
                     className="flex justify-between items-center text-sm hover:bg-blue-50 px-3 py-2 rounded-md cursor-pointer border border-transparent hover:border-blue-100 transition-all group"
                   >
                     <span className="font-medium text-gray-700 truncate max-w-[180px]" title={storeInfo.store}>{storeInfo.store}</span>
-                    <span className="font-bold text-blue-600 bg-blue-50 group-hover:bg-white px-2 py-0.5 rounded-full text-xs transition-colors">{storeInfo.total}</span>
+                    <span className={`font-bold px-2 py-0.5 rounded-full text-xs transition-colors ${storeInfo.statusColor ? storeInfo.statusColor : 'text-blue-600 bg-blue-50 group-hover:bg-white'}`}>
+                      {storeInfo.total}
+                    </span>
                   </div>
                 ))
               )
             ) : (
               // VISTA 2: Lista de Tallas (Detail or Single Store)
-              currentData.length === 0 ? (
+              (isAggregatedView && selectedStoreData?.feedbackMessage) ? (
+                <div className="p-4 text-center bg-gray-50 rounded-lg border border-gray-100">
+                  <p className="text-sm text-gray-700 whitespace-pre-line leading-relaxed font-medium">
+                    {selectedStoreData.feedbackMessage}
+                  </p>
+                </div>
+              ) : currentData.length === 0 ? (
               <p className="text-center text-sm text-gray-400 italic py-2">Sin datos disponibles</p>
             ) : (
               currentData.map((item, idx) => (

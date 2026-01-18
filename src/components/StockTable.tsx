@@ -6,15 +6,17 @@ import StockDetailModal from './StockDetailModal';
 import { useStockGrouping } from '../hooks/useStockGrouping';
 import SimpleMetricModal from './SimpleMetricModal';
 import { getCleanSize } from '../utils/stockUtils';
+import { generateComparativeData } from '../utils/comparativeHelpers';
 
 // Definimos qué espera recibir este componente
 interface StockTableProps {
   data: NormalizedRow[];
   productDictionary: Record<string, string>; // Recibimos el diccionario desde App.tsx
   isMultiStore?: boolean;
+  searchTerm?: string;
 }
 
-const StockTable: React.FC<StockTableProps> = ({ data, productDictionary, isMultiStore = false }) => {
+const StockTable: React.FC<StockTableProps> = ({ data, productDictionary, isMultiStore = false, searchTerm = '' }) => {
   
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
@@ -33,7 +35,7 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary, isMult
     metricLabel: string;
     data: { size: string; value: number }[];
     isAggregatedView?: boolean;
-    aggregatedData?: { store: string; total: number; sizes: { size: string; value: number }[] }[];
+    aggregatedData?: { store: string; total: number | string; sizes: { size: string; value: number }[]; statusColor?: string; feedbackMessage?: string }[];
   } | null>(null);
 
   console.log("🔄 [DEBUG] Render StockTable. MetricModal State:", metricModal);
@@ -192,8 +194,42 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary, isMult
     }
   };
 
+  const handleComparativeClick = (e: React.MouseEvent, group: any) => {
+    e.stopPropagation();
+    
+    // 1. Filtrar variantes del SKU base
+    const variants = data.filter((item) => {
+      const parts = item.sku.split('_');
+      const itemBaseSku = parts.length >= 2 ? parts.slice(0, 2).join('_').toLowerCase() : item.sku.toLowerCase();
+      return itemBaseSku === group.baseSku;
+    });
+
+    // 2. Agrupar por tienda
+    const storesMap = new Map<string, NormalizedRow[]>();
+    variants.forEach(v => {
+      if (!storesMap.has(v.tiendaNombre)) {
+        storesMap.set(v.tiendaNombre, []);
+      }
+      storesMap.get(v.tiendaNombre)?.push(v);
+    });
+
+    // 3. Calcular estado por tienda
+    // Delegamos la lógica al helper externo para garantizar paridad y limpieza
+    const aggregatedData = generateComparativeData(storesMap, sizeMap);
+
+    setMetricModal({
+      isOpen: true,
+      title: group.name,
+      sku: group.baseSku,
+      metricLabel: "Informe Comparativo",
+      data: [],
+      isAggregatedView: true,
+      aggregatedData: aggregatedData
+    });
+  };
+
   // 1. EL CEREBRO: Lógica de Agrupación y Suma (Extraída a Hook)
-  const groupedData = useStockGrouping(data, productDictionary, sizeMap);
+  const groupedData = useStockGrouping(data, productDictionary, sizeMap, searchTerm, isMultiStore);
 
   // Helper para colores de la tabla
   const getStatusColor = (status: string) => {
@@ -229,6 +265,11 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary, isMult
               <th scope="col" className="px-3 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">
                 Nombre
               </th>
+              {isMultiStore && searchTerm && (
+                <th scope="col" className="px-3 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">
+                  Tienda
+                </th>
+              )}
               <th scope="col" className="px-3 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider min-w-[100px]">
                 Stock
               </th>
@@ -271,38 +312,74 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary, isMult
                   </div>
                 </td>
 
-                {/* 3. Columna Stock: El dato Estrella. Grande y claro. */}
+                {isMultiStore && searchTerm && (
+                  <td className="whitespace-nowrap px-3 py-4 text-center text-xs font-medium text-gray-500">
+                    {group.storeName}
+                  </td>
+                )}
+
+{/* 3. Columna Stock: Restaurada (Estable) */}
                 <td className="whitespace-nowrap px-2 py-4 text-center">
-                  <span 
-                    onClick={(e) => handleStockClick(e, group)}
-                    className={`text-xs font-bold cursor-pointer hover:text-blue-600 underline decoration-dotted underline-offset-2 px-2 py-1 rounded ${group.stock > 0 ? 'text-blue-700' : 'text-red-400'}`}
-                  >
-                    {group.stock}
-                  </span>
+                  {isMultiStore ? (
+                    /* CASO 1: Modo Todas las Tiendas */
+                    <span 
+                      onClick={(e) => handleStockClick(e, group)}
+                      className={`text-xs font-bold cursor-pointer hover:text-blue-600 underline decoration-dotted underline-offset-2 px-2 py-1 rounded ${group.stock > 0 ? 'text-blue-700' : 'text-red-400'}`}
+                    >
+                      {group.stock}
+                    </span>
+                  ) : (
+                    /* CASO 2: Tienda Única */
+                    <span 
+                      onClick={(e) => handleStockClick(e, group)}
+                      className={`text-xs font-bold cursor-pointer hover:text-blue-600 underline decoration-dotted underline-offset-2 px-2 py-1 rounded ${group.stock > 0 ? 'text-blue-700' : 'text-red-400'}`}
+                    >
+                      {group.stock}
+                    </span>
+                  )}
                 </td>
 
-                {/* Columna Venta 2W */}
+                {/* Columna Venta 2W: Restaurada (Estable) */}
                 <td className="whitespace-nowrap px-2 py-4 text-center">
-                  <span 
-                    onClick={(e) => handleSalesClick(e, group)}
-                    className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-full cursor-pointer hover:text-blue-800 underline decoration-dotted underline-offset-2"
-                  >
-                    {group.sales2w}
-                  </span>
+                  {isMultiStore ? (
+                    <span 
+                      onClick={(e) => handleSalesClick(e, group)}
+                      className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-full cursor-pointer hover:text-blue-800 underline decoration-dotted underline-offset-2"
+                    >
+                      {group.sales2w}
+                    </span>
+                  ) : (
+                    <span 
+                      onClick={(e) => handleSalesClick(e, group)}
+                      className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-full cursor-pointer hover:text-blue-800 underline decoration-dotted underline-offset-2"
+                    >
+                      {group.sales2w}
+                    </span>
+                  )}
                 </td>
 
                 {/* Columna Salud Stock (Nueva) */}
                 <td 
                   className="whitespace-nowrap px-2 py-4 text-center cursor-pointer"
-                  style={{ cursor: 'pointer' }}
-                  onClick={() => handleOpenModal(group.baseSku, group.health)}
                 >
-                  <span
-                    className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer shadow-sm transition-all hover:shadow-md max-w-[200px] truncate ${getStatusColor(group.health.status)}`}
-                    title={group.health.status}
-                  >
-                    {group.health.emoji} {group.health.status}
-                  </span>
+                  {isMultiStore && !group.storeName ? (
+                    /* CASO 1: Visión Global Agrupada -> Botón Comparativo */
+                    <button
+                      onClick={(e) => handleComparativeClick(e, group)}
+                      className="text-xs font-medium text-blue-600 hover:text-blue-800 hover:underline flex items-center justify-center gap-1 mx-auto transition-colors"
+                    >
+                      <span>📊</span> Comparativo
+                    </button>
+                  ) : (
+                    /* CASO 2: Fila Específica (Tienda Única o Desglose de Búsqueda) -> Semáforo Real */
+                    <span
+                      onClick={() => handleOpenModal(group.baseSku, group.health)}
+                      className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer shadow-sm transition-all hover:shadow-md max-w-[200px] truncate ${getStatusColor(group.health.status)}`}
+                      title={group.health.status}
+                    >
+                      {group.health.emoji} {group.health.status}
+                    </span>
+                  )}
                 </td>
 
                 {/* Columna RA */}

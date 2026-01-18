@@ -2,7 +2,13 @@ import { useMemo } from 'react';
 import type { NormalizedRow, StockHealth, StockStatus } from '../types';
 import { getCleanSize } from '../utils/stockUtils';
 
-export const useStockGrouping = (data: NormalizedRow[], productDictionary: Record<string, string>, sizeMap: Record<string, string>) => {
+export const useStockGrouping = (
+  data: NormalizedRow[], 
+  productDictionary: Record<string, string>, 
+  sizeMap: Record<string, string>,
+  searchTerm: string = '',
+  isMultiStore: boolean = false
+) => {
   // 1. EL CEREBRO: Lógica de Agrupación y Suma
   const groupedData = useMemo(() => {
     const groups: Record<string, {
@@ -20,6 +26,7 @@ export const useStockGrouping = (data: NormalizedRow[], productDictionary: Recor
       comingSizes: string[];
       requestSizes: string[];
       deadSizes: string[];
+      storeName?: string; // Nueva propiedad opcional
     }> = {};
 
     data.forEach((item) => {
@@ -29,11 +36,20 @@ export const useStockGrouping = (data: NormalizedRow[], productDictionary: Recor
       // Si el SKU es corto, usa el original, si es largo, toma la base
       const baseSku = parts.length >= 2 ? parts.slice(0, 2).join('_').toLowerCase() : item.sku.toLowerCase();
 
-      if (!groups[baseSku]) {
+      // NUEVA LÓGICA: Desglose por tienda si hay búsqueda y estamos en modo multi-tienda
+      let groupKey = baseSku;
+      let storeName: string | undefined = undefined;
+
+      if (searchTerm && isMultiStore) {
+          groupKey = `${baseSku}_${item.tiendaNombre}`;
+          storeName = item.tiendaNombre;
+      }
+
+      if (!groups[groupKey]) {
         // Buscamos el nombre bonito en el diccionario que viene de Firebase
         const dictionaryName = productDictionary[baseSku];
         
-        groups[baseSku] = {
+        groups[groupKey] = {
           baseSku,
           originalSku: item.sku,
           // Prioridad: Diccionario > Description (Inglés) > Descripcion (Español) > Aviso
@@ -49,15 +65,16 @@ export const useStockGrouping = (data: NormalizedRow[], productDictionary: Recor
           comingSizes: [],
           requestSizes: [],
           deadSizes: [],
+          storeName, // Asignamos el nombre de la tienda si existe
         };
       }
 
       // Sumatoria matemática segura
-      groups[baseSku].stock += Number(item.stock) || 0;
-      groups[baseSku].transit += Number(item.transit) || 0;
-      groups[baseSku].sales2w += Number(item.sales2w) || 0;
-      groups[baseSku].ra += Number(item.ra) || 0;
-      groups[baseSku].stock_cd += Number(item.stock_cd) || 0;
+      groups[groupKey].stock += Number(item.stock) || 0;
+      groups[groupKey].transit += Number(item.transit) || 0;
+      groups[groupKey].sales2w += Number(item.sales2w) || 0;
+      groups[groupKey].ra += Number(item.ra) || 0;
+      groups[groupKey].stock_cd += Number(item.stock_cd) || 0;
 
       // Lógica para determinar Salud de Stock (Analizar cada talla)
       const stockTalla = Number(item.stock || 0);
@@ -65,24 +82,24 @@ export const useStockGrouping = (data: NormalizedRow[], productDictionary: Recor
       const cdTalla = Number(item.stock_cd || 0);
 
       // Legacy Logic (Mantenemos esto para que el Modal siga funcionando igual)
-      if (stockTalla === 0) groups[baseSku].hasZero = true;
-      if (stockTalla === 1) groups[baseSku].hasOne = true;
+      if (stockTalla === 0) groups[groupKey].hasZero = true;
+      if (stockTalla === 1) groups[groupKey].hasOne = true;
 
       // Smart Logic (Fase de Inteligencia)
       if (stockTalla <= 1) {
         const sizeName = getCleanSize(item.sku, sizeMap);
         
         if (transitTalla > 0) {
-          groups[baseSku].comingSizes.push(sizeName);
+          groups[groupKey].comingSizes.push(sizeName);
         } else if (cdTalla > 0) {
-          groups[baseSku].requestSizes.push(sizeName);
+          groups[groupKey].requestSizes.push(sizeName);
         } else {
-          groups[baseSku].deadSizes.push(sizeName);
+          groups[groupKey].deadSizes.push(sizeName);
         }
       }
     });
 
-    return Object.values(groups).map(group => {
+    let result = Object.values(groups).map(group => {
       // 2. Estado Inteligente (Fase 2)
       let status: StockStatus = 'STOCK OK';
       let emoji = '🟢';
@@ -110,7 +127,15 @@ export const useStockGrouping = (data: NormalizedRow[], productDictionary: Recor
 
       return { ...group, health };
     });
-  }, [data, productDictionary, sizeMap]);
+
+    // FILTRO DE LIMPIEZA ("Luz Verde")
+    // Si estamos en modo búsqueda desglosada, eliminamos las tiendas sin actividad (stock 0 y tránsito 0)
+    if (searchTerm && isMultiStore) {
+        result = result.filter((group) => group.stock > 0 || group.transit > 0);
+    }
+
+    return result;
+  }, [data, productDictionary, sizeMap, searchTerm, isMultiStore]);
 
   return groupedData;
 };

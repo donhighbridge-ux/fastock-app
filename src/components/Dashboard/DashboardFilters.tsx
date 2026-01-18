@@ -50,7 +50,7 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({
 
   const handleTiendaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newTienda = e.target.value === '' ? null : e.target.value;
-    onFilter({ marca, tienda: newTienda, area: null, categoria: null });
+    onFilter({ marca, tienda: newTienda, area, categoria });
   };
 
   const handleAreaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
