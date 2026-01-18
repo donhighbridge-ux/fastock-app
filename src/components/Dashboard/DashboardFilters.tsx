@@ -16,9 +16,18 @@ interface DashboardFiltersProps {
     area: string | null;
     categoria: string | null;
   };
+  areas?: string[];
+  categories?: string[];
 }
 
-const DashboardFilters: React.FC<DashboardFiltersProps> = ({ data, onFilter, onSearch, selectedFilters }) => {
+const DashboardFilters: React.FC<DashboardFiltersProps> = ({ 
+  data, 
+  onFilter, 
+  onSearch, 
+  selectedFilters,
+  areas = [],
+  categories = []
+}) => {
   const { marca, tienda, area, categoria } = selectedFilters;
 
   // 1. Extract unique values for each filter using useMemo for optimization
@@ -32,21 +41,6 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({ data, onFilter, onS
     const uniqueTiendas = [...new Set(sourceData.map(item => item.tiendaNombre))];
     return uniqueTiendas.filter(t => t && t.trim() !== "").sort();
   }, [data, marca]);
-
-  const areas = useMemo(() => {
-    let sourceData = marca ? data.filter(d => d.marca === marca) : data;
-    if (tienda) sourceData = sourceData.filter(d => d.tiendaNombre === tienda);
-    const uniqueAreas = [...new Set(sourceData.map(item => item.area))];
-    return uniqueAreas.filter(a => a && a.trim() !== "").sort();
-  }, [data, marca, tienda]);
-
-  const categorias = useMemo(() => {
-    let sourceData = marca ? data.filter(d => d.marca === marca) : data;
-    if (tienda) sourceData = sourceData.filter(d => d.tiendaNombre === tienda);
-    if (area) sourceData = sourceData.filter(d => d.area === area);
-    const uniqueCategorias = [...new Set(sourceData.map(item => item.categoria))];
-    return uniqueCategorias.filter(c => c && c.trim() !== "").sort();
-  }, [data, marca, tienda, area]);
 
   // 2. Handle filter changes
   const handleMarcaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -96,7 +90,7 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({ data, onFilter, onS
           value={tienda || ''}
           onChange={handleTiendaChange}
         >
-          <option value="">Todas</option>
+          <option value="all">Todas</option>
           {tiendas.map(t => (
             <option key={t} value={t}>{t}</option>
           ))}
@@ -113,7 +107,7 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({ data, onFilter, onS
           onChange={handleAreaChange}
         >
           <option value="">Todas</option>
-          {areas.map(a => (
+          {areas.map((a: string) => (
             <option key={a} value={a}>{a}</option>
           ))}
         </select>
@@ -129,7 +123,7 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({ data, onFilter, onS
           onChange={handleCategoriaChange}
         >
           <option value="">Todas</option>
-          {categorias.map(c => (
+          {categories.map((c: string) => (
             <option key={c} value={c}>{c}</option>
           ))}
         </select>

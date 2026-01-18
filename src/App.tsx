@@ -13,6 +13,7 @@ import './App.css';
 
 const ORGANIZATION_ID = "demo_org_v1";
 const ALL_STORES_OPTION = "Todas las Tiendas";
+const ALL_STORES_ID = 'all';
 
 // --- COMPONENTE DE BIENVENIDA (Onboarding) ---
 interface WelcomeScreenProps {
@@ -25,38 +26,41 @@ interface WelcomeScreenProps {
 
 const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ step, options, onSelect, onBack, instruction }) => {
   return (
-    <div className="flex flex-col justify-center items-center h-[70vh] relative animate-fade-in">
-      {/* Botón Volver (Solo en paso Tienda) */}
+    <div className="flex flex-col justify-center items-center h-[70vh] relative animate-fade-in bg-white">
+      {/* Botón Volver */}
       {step === 'store' && onBack && (
         <button
           onClick={onBack}
-          className="absolute top-0 left-0 p-4 text-gray-400 hover:text-gray-600 transition-colors flex items-center gap-2 group"
+          className="absolute top-0 left-0 p-4 text-gray-500 hover:text-gray-900 transition-colors flex items-center gap-2"
         >
-          <span className="group-hover:-translate-x-1 transition-transform">←</span>
-          <span className="text-sm font-medium">Volver a Marcas</span>
+          <span>← Volver</span>
         </button>
       )}
 
-      {/* Encabezado */}
-      <h1 className="text-4xl font-bold text-gray-800 mb-12 tracking-tight">Bienvenido a FASTock</h1>
-
-      {/* Contenedor del Selector */}
-      <div className="w-full max-w-md flex flex-col items-center gap-6">
-        <p className="text-xl font-bold text-slate-900 text-center">{instruction}</p>
-
-        <select
-          className="w-72 px-4 py-3 bg-white border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-700 appearance-none cursor-pointer text-center text-base font-medium hover:border-blue-400 transition-colors"
-          onChange={(e) => e.target.value && onSelect(e.target.value)}
-          defaultValue=""
-        >
-          <option value="" disabled>Seleccionar...</option>
-          {options.map(opt => (
-            <option key={opt} value={opt}>{opt}</option>
-          ))}
-        </select>
+      <div className="w-full max-w-md px-6 flex flex-col items-center">
+        <h1 className="text-4xl font-bold text-gray-900 mb-2">Bienvenido a FASTock</h1>
+        <p className="text-xl text-gray-600 mb-8 text-center">{instruction}</p>
         
-        <div className="text-xs text-gray-400 mt-2">
-          {options.length} opciones disponibles
+        <div className="w-full relative">
+          <select
+            // TRUCO CLAVE: La 'key' fuerza a React a recrear el input si cambian las opciones o el paso.
+            // Esto resetea el estado interno del navegador y permite volver a seleccionar.
+            key={`${step}-${options.length}`} 
+            className="w-full p-4 pr-10 text-lg border border-gray-300 rounded-lg bg-white text-gray-900 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none shadow-sm appearance-none cursor-pointer transition-all hover:border-gray-400"
+            defaultValue=""
+            onChange={(e) => onSelect(e.target.value)}
+          >
+            <option value="" disabled>Seleccionar opción...</option>
+            {options.map((opt) => (
+              <option key={opt} value={opt}>
+                {opt}
+              </option>
+            ))}
+          </select>
+          {/* Flecha visual personalizada para indicar que es un dropdown */}
+          <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-500">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </div>
         </div>
       </div>
     </div>
@@ -135,6 +139,9 @@ function App() {
     area: string | null;
     categoria: string | null;
   }>({ marca: null, tienda: null, area: null, categoria: null });
+  
+  // NUEVO ESTADO (La Memoria): Controla si el usuario ya ingresó al Dashboard
+  const [isDashboardActive, setIsDashboardActive] = useState(false);
 
   // Función para obtener datos de stock (Persistencia al recargar)
   const fetchStockData = async () => {
@@ -262,24 +269,76 @@ function App() {
     return [ALL_STORES_OPTION, ...stores]; // Agregamos siempre la opción "Todas"
   }, [data, currentFilters.marca]);
 
-  const handleFilterChange = (filters: { marca: string | null; tienda: string | null; area: string | null; categoria: string | null }) => {
-    // BUG FIX #3: Evitar "Kickback" a la pantalla de bienvenida al cambiar filtros en el Dashboard.
-    // Si hay marca seleccionada pero la tienda se reinició (null/undefined), forzamos "Todas las Tiendas".
-    const safeFilters = { ...filters };
-    if (safeFilters.marca && !safeFilters.tienda) {
-      safeFilters.tienda = ALL_STORES_OPTION;
+  // 3. Calcular Opciones de Filtro (Área y Categoría)
+  const availableOptions = useMemo(() => {
+    if (!currentFilters.marca) return { areas: [], categories: [] };
+
+    let source = data.filter(d => d.marca === currentFilters.marca);
+
+    if (currentFilters.tienda && currentFilters.tienda !== ALL_STORES_ID) {
+      source = source.filter(d => d.tiendaNombre === currentFilters.tienda);
     }
 
+    return {
+      areas: Array.from(new Set(source.map(i => i.area))).filter(Boolean).sort(),
+      categories: Array.from(new Set(source.map(i => i.categoria))).filter(Boolean).sort()
+    };
+  }, [data, currentFilters.marca, currentFilters.tienda]);
+
+  const handleFilterChange = (filters: { marca: string | null; tienda: string | null; area: string | null; categoria: string | null }) => {
+    const safeFilters = { ...filters };
+    
+    // 1. LIMPIEZA DE "TODAS LAS TIENDAS" (String -> ID Lógico)
+    // Atrapamos el objeto, el string literal o el ID 'all'
+    if (
+        safeFilters.tienda === ALL_STORES_OPTION || 
+        (typeof safeFilters.tienda === 'object' && safeFilters.tienda !== null) ||
+        safeFilters.tienda === 'Todas las Tiendas'
+    ) {
+       safeFilters.tienda = ALL_STORES_ID;
+    }
+
+    // 2. PROTECCIÓN DE SESIÓN (Anti-Kickback)
+    // Si ya estamos dentro del dashboard...
+    if (isDashboardActive) {
+        // ...y el usuario borró la marca (seleccionó "Todas las Marcas")...
+        if (!safeFilters.marca) {
+            // Mantenemos la tienda actual o ponemos 'all', pero NO salimos.
+            // Opcional: Si quieres ver todo global, podrías dejar marca null y tienda 'all'.
+        }
+        
+        // ...o si cambió de marca y la tienda quedó huérfana (null)...
+        if (safeFilters.marca && !safeFilters.tienda) {
+            safeFilters.tienda = ALL_STORES_ID; // Forzamos "Todas" para no romper la vista
+        }
+    }
+
+    // 3. ACTIVACIÓN DEL DASHBOARD (Tarjeta de Acceso)
+    // Si seleccionó una tienda válida (específica o 'all'), ¡Adentro!
+    if (safeFilters.tienda) {
+        setIsDashboardActive(true);
+    }
+    
+    // NOTA: ELIMINAMOS LA LÍNEA QUE HACÍA setIsDashboardActive(false). 
+    // Una vez dentro, no te sacamos.
+
+    // 4. ACTUALIZAR ESTADO
     setCurrentFilters(safeFilters);
     
+    // 5. FILTRADO DE DATOS (Lógica de Negocio)
     let newData = [...data];
 
-    if (safeFilters.marca) newData = newData.filter(item => item.marca === safeFilters.marca);
+    // Filtro Marca
+    if (safeFilters.marca) {
+      newData = newData.filter(item => item.marca === safeFilters.marca);
+    }
     
-    // CRÍTICO: Si es "Todas las Tiendas", NO filtramos por tienda, dejamos pasar todas las de la marca.
-    if (safeFilters.tienda && safeFilters.tienda !== ALL_STORES_OPTION) {
+    // Filtro Tienda (Solo si NO es 'all')
+    if (safeFilters.tienda && safeFilters.tienda !== ALL_STORES_ID) {
       newData = newData.filter(item => item.tiendaNombre === safeFilters.tienda);
     }
+
+    // Filtros secundarios
     if (safeFilters.area) newData = newData.filter(item => item.area === safeFilters.area);
     if (safeFilters.categoria) newData = newData.filter(item => item.categoria === safeFilters.categoria);
 
@@ -328,25 +387,28 @@ function App() {
                     Ir a Carga de Datos
                   </button>
                 </div>
-              ) : !currentFilters.marca ? (
-                /* ESTADO UNO: Selección de Marca */
-                <WelcomeScreen 
-                  step="brand"
-                  instruction="Selecciona Una Marca Para Comenzar"
-                  options={uniqueBrands}
-                  onSelect={(brand) => handleFilterChange({ ...currentFilters, marca: brand })}
-                />
-              ) : !currentFilters.tienda ? (
-                /* ESTADO DOS: Selección de Tienda */
-                <WelcomeScreen 
-                  step="store"
-                  instruction="Selecciona Una Tienda Para Continuar"
-                  options={uniqueStores}
-                  onSelect={(store) => handleFilterChange({ ...currentFilters, tienda: store })}
-                  onBack={() => handleFilterChange({ ...currentFilters, marca: null })}
-                />
+              ) : !isDashboardActive ? (
+                /* PORTERO: Si no está activo el dashboard, mostramos flujo de bienvenida */
+                 !currentFilters.marca ? (
+                    /* ESTADO UNO: Selección de Marca */
+                    <WelcomeScreen 
+                      step="brand"
+                      instruction="Selecciona Una Marca Para Comenzar"
+                      options={uniqueBrands}
+                      onSelect={(brand) => handleFilterChange({ ...currentFilters, marca: brand })}
+                    />
+                 ) : (
+                    /* ESTADO DOS: Selección de Tienda */
+                    <WelcomeScreen 
+                      step="store"
+                      instruction="Selecciona Una Tienda Para Continuar"
+                      options={uniqueStores}
+                      onSelect={(store) => handleFilterChange({ ...currentFilters, tienda: store })}
+                      onBack={() => handleFilterChange({ ...currentFilters, marca: null })}
+                    />
+                 )
               ) : (
-                /* ESTADO TRES: El Dashboard (Solo si hay tienda seleccionada) */
+                /* ESTADO TRES: El Dashboard (Solo si isDashboardActive es true) */
                 <>
                   <h2 className="text-2xl font-bold mb-4 text-gray-800 ml-[52px]">Tablero de Control</h2>
                   <DashboardFilters 
@@ -354,12 +416,14 @@ function App() {
                     onFilter={handleFilterChange} 
                     onSearch={handleSearch} 
                     selectedFilters={currentFilters} 
+                    areas={availableOptions.areas}
+                    categories={availableOptions.categories}
                   />
                   <div className="min-h-[500px] transition-all duration-300">
                     <StockTable 
                       data={filteredData} 
                       productDictionary={productDictionary} 
-                      isMultiStore={currentFilters.tienda === ALL_STORES_OPTION}
+                      isMultiStore={currentFilters.tienda === ALL_STORES_ID}
                     />
                   </div>
                 </>
