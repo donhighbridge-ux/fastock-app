@@ -43,6 +43,10 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary, isMult
   // Estado para el mapa de tallas dinámico
   const [sizeMap, setSizeMap] = useState<Record<string, string>>({});
 
+  // ESTADO DE PAGINACIÓN
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(50);
+
   // Fetch del mapa de tallas desde Firebase al montar
   useEffect(() => {
     const fetchSizeMap = async () => {
@@ -231,6 +235,18 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary, isMult
   // 1. EL CEREBRO: Lógica de Agrupación y Suma (Extraída a Hook)
   const groupedData = useStockGrouping(data, productDictionary, sizeMap, searchTerm, isMultiStore);
 
+  // Resetear página cuando cambian los datos (filtros)
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [groupedData]);
+
+  // LÓGICA DE CORTE (SLICING)
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  // Protegemos contra null/undefined aunque el hook suele devolver array vacío
+  const currentRows = groupedData ? groupedData.slice(indexOfFirstItem, indexOfLastItem) : [];
+  const totalPages = groupedData ? Math.ceil(groupedData.length / itemsPerPage) : 0;
+
   // Helper para colores de la tabla
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -292,7 +308,7 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary, isMult
           </thead>
 
           <tbody className="divide-y divide-gray-200 bg-white">
-            {groupedData.map((group, index) => (
+            {currentRows.map((group, index) => (
               <tr 
                 key={group.baseSku} 
                 className="hover:bg-blue-50 transition-colors duration-150 group" // Efecto hover suave
@@ -407,9 +423,71 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary, isMult
         </table>
       </div>
       
-      {/* Footer informativo */}
-      <div className="bg-gray-50 px-6 py-3 border-t border-gray-200 text-xs text-gray-500 text-right">
-        Mostrando {groupedData.length} productos únicos (Agrupados por SKU)
+      {/* COMPONENTE DE CONTROL DE PÁGINAS (FOOTER) */}
+      <div className="bg-gray-50 px-6 py-3 border-t border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-4 select-none">
+        
+        {/* Selector de filas por página */}
+        <div className="flex items-center gap-2 text-sm text-gray-700">
+          <span className="font-medium">Filas:</span>
+          <select
+            value={itemsPerPage}
+            onChange={(e) => {
+              setItemsPerPage(Number(e.target.value));
+              setCurrentPage(1);
+            }}
+            className="border-gray-300 rounded text-sm focus:ring-blue-500 focus:border-blue-500 py-1 pl-2 pr-6 bg-white cursor-pointer"
+          >
+            <option value={20}>20</option>
+            <option value={50}>50</option>
+            <option value={100}>100</option>
+          </select>
+        </div>
+
+        {/* Indicador de Resultados */}
+        <div className="text-sm text-gray-600">
+          Mostrando <span className="font-bold text-gray-900">{indexOfFirstItem + 1}</span> - <span className="font-bold text-gray-900">{Math.min(indexOfLastItem, groupedData.length)}</span> de <span className="font-bold text-gray-900">{groupedData.length}</span> productos
+        </div>
+
+        {/* Botones de Navegación */}
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => setCurrentPage(1)}
+            disabled={currentPage === 1}
+            className="p-1.5 rounded-md border border-gray-300 bg-white text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            title="Primera Página"
+          >
+            <span className="sr-only">Primera</span>
+            «
+          </button>
+          <button
+            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+            disabled={currentPage === 1}
+            className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-700 font-medium hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Anterior
+          </button>
+          
+          <span className="mx-2 text-sm font-medium text-gray-700">
+            Pág {currentPage} / {totalPages}
+          </span>
+
+          <button
+            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+            disabled={currentPage === totalPages}
+            className="px-3 py-1.5 rounded-md border border-gray-300 bg-white text-gray-700 font-medium hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+          >
+            Siguiente
+          </button>
+          <button
+            onClick={() => setCurrentPage(totalPages)}
+            disabled={currentPage === totalPages}
+            className="p-1.5 rounded-md border border-gray-300 bg-white text-gray-500 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            title="Última Página"
+          >
+            <span className="sr-only">Última</span>
+            »
+          </button>
+        </div>
       </div>
 
       <StockDetailModal

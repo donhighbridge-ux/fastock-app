@@ -144,6 +144,7 @@ function App() {
   // NUEVO ESTADO (La Memoria): Controla si el usuario ya ingresó al Dashboard
   const [isDashboardActive, setIsDashboardActive] = useState(false);
   const [currentSearchTerm, setCurrentSearchTerm] = useState('');
+  const [searchTermInput, setSearchTermInput] = useState(''); // Estado local para el input (instantáneo)
   const [trackingNotification, setTrackingNotification] = useState<number | null>(null);
 
   // Función para obtener datos de stock (Persistencia al recargar)
@@ -169,6 +170,17 @@ function App() {
   useEffect(() => {
     fetchStockData();
   }, []);
+
+  // EFECTO DE DEBOUNCE: Actualiza el término de búsqueda real con retraso
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setCurrentSearchTerm(searchTermInput);
+      const searchTermLower = searchTermInput.toLowerCase();
+      const newData = data.filter(item => item.sku.toLowerCase().includes(searchTermLower) || item.description.toLowerCase().includes(searchTermLower));
+      setFilteredData(newData);
+    }, 400); // 400ms de espera
+    return () => clearTimeout(timer);
+  }, [searchTermInput, data]);
 
   // Suscripción al Diccionario de Productos (Con Fallback)
   useEffect(() => {
@@ -421,10 +433,7 @@ const handleFileUpload = async (normalizedData: NormalizedRow[], type: string) =
   };
 
   const handleSearch = (searchTerm: string) => {
-    setCurrentSearchTerm(searchTerm);
-    const searchTermLower = searchTerm.toLowerCase();
-    const newData = data.filter(item => item.sku.toLowerCase().includes(searchTermLower) || item.description.toLowerCase().includes(searchTermLower));
-    setFilteredData(newData);
+    setSearchTermInput(searchTerm);
   };
 
   if (isLoading) {
