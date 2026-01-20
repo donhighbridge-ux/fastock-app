@@ -246,7 +246,7 @@ function App() {
 
   const checkForTrackingUpdates = (newData: NormalizedRow[]) => {
     try {
-      const storedTracking = localStorage.getItem('trackingList');
+      const storedTracking = localStorage.getItem('fastock_tracking');
       if (!storedTracking) return;
 
       const trackingList = JSON.parse(storedTracking) as { sku: string }[];
