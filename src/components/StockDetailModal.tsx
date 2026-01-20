@@ -9,10 +9,11 @@ interface StockDetailModalProps {
   variants: NormalizedRow[];
   health: StockHealth | null;
   sizeMap: Record<string, string>;
+  currentStoreName?: string;
 }
 
-const StockDetailModal: React.FC<StockDetailModalProps> = ({ isOpen, onClose, variants, health, sizeMap }) => {
-  const { addToRequest, addToTracking } = useCart();
+const StockDetailModal: React.FC<StockDetailModalProps> = ({ isOpen, onClose, variants, health, sizeMap, currentStoreName }) => {
+  const { addToRequest, addToTracking, trackingList } = useCart();
   const [addedState, setAddedState] = useState<'request' | 'tracking' | null>(null);
 
   if (!isOpen || !health) return null;
@@ -30,6 +31,11 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({ isOpen, onClose, va
   const productTitle = variants[0]?.description || 'Producto Sin Nombre';
   const baseSku = variants[0]?.sku?.split('_')[0] || 'N/A';
 
+  // Verificación de seguimiento por tienda
+  const isTracked = trackingList.some(
+    item => item.sku === baseSku && item.originStore === (currentStoreName || 'Global')
+  );
+
   const handleAddToRequest = (tallas: string[]) => {
     addToRequest({
       sku: baseSku,
@@ -37,6 +43,7 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({ isOpen, onClose, va
       area: variants[0]?.area || 'General',
       description: productTitle,
       timestamp: Date.now(),
+      originStore: currentStoreName || 'Global',
     });
     setAddedState('request');
     setTimeout(() => setAddedState(null), 2000);
@@ -47,6 +54,7 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({ isOpen, onClose, va
       sku: baseSku,
       description: productTitle,
       timestamp: Date.now(),
+      originStore: currentStoreName || 'Global',
     });
     setAddedState('tracking');
     setTimeout(() => setAddedState(null), 2000);

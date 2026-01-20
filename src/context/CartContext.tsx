@@ -6,12 +6,14 @@ export interface CartItem {
   area: string;
   description: string;
   timestamp: number;
+  originStore?: string;
 }
 
 export interface TrackingItem {
   sku: string;
   description: string;
   timestamp: number;
+  originStore?: string;
 }
 
 interface CartContextType {
@@ -19,8 +21,8 @@ interface CartContextType {
   trackingList: TrackingItem[];
   addToRequest: (item: CartItem) => void;
   addToTracking: (item: TrackingItem) => void;
-  removeFromRequest: (sku: string) => void;
-  removeFromTracking: (sku: string) => void;
+  removeFromRequest: (sku: string, originStore?: string) => void;
+  removeFromTracking: (sku: string, originStore?: string) => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -47,7 +49,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const addToRequest = (item: CartItem) => {
     setRequestList((prev) => {
       // Si el SKU ya existe, fusionamos las tallas para evitar duplicados
-      const existingIndex = prev.findIndex((i) => i.sku === item.sku);
+      const existingIndex = prev.findIndex((i) => i.sku === item.sku && i.originStore === item.originStore);
       if (existingIndex >= 0) {
         const updated = [...prev];
         const mergedSizes = Array.from(new Set([...updated[existingIndex].sizes, ...item.sizes]));
@@ -60,17 +62,27 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const addToTracking = (item: TrackingItem) => {
     setTrackingList((prev) => {
-      if (prev.some((i) => i.sku === item.sku)) return prev;
+      if (prev.some((i) => i.sku === item.sku && i.originStore === item.originStore)) return prev;
       return [...prev, item];
     });
   };
 
-  const removeFromRequest = (sku: string) => {
-    setRequestList((prev) => prev.filter((item) => item.sku !== sku));
+  const removeFromRequest = (sku: string, originStore?: string) => {
+    setRequestList((prev) => prev.filter((item) => {
+      if (originStore) {
+        return !(item.sku === sku && item.originStore === originStore);
+      }
+      return item.sku !== sku;
+    }));
   };
 
-  const removeFromTracking = (sku: string) => {
-    setTrackingList((prev) => prev.filter((item) => item.sku !== sku));
+  const removeFromTracking = (sku: string, originStore?: string) => {
+    setTrackingList((prev) => prev.filter((item) => {
+      if (originStore) {
+        return !(item.sku === sku && item.originStore === originStore);
+      }
+      return item.sku !== sku;
+    }));
   };
 
   return (

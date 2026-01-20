@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import type { NormalizedRow, StockHealth } from '../types'; // Asegúrate de importar tus tipos reales si los tienes
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase-config';
@@ -14,9 +14,11 @@ interface StockTableProps {
   productDictionary: Record<string, string>; // Recibimos el diccionario desde App.tsx
   isMultiStore?: boolean;
   searchTerm?: string;
+  currentStoreName?: string;
+  subFilters?: { health: string; status: string };
 }
 
-const StockTable: React.FC<StockTableProps> = ({ data, productDictionary, isMultiStore = false, searchTerm = '' }) => {
+const StockTable: React.FC<StockTableProps> = ({ data, productDictionary, isMultiStore = false, searchTerm = '', currentStoreName, subFilters }) => {
   
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
@@ -235,17 +237,62 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary, isMult
   // 1. EL CEREBRO: Lógica de Agrupación y Suma (Extraída a Hook)
   const groupedData = useStockGrouping(data, productDictionary, sizeMap, searchTerm, isMultiStore);
 
+  // 1.5. EL FILTRO FINO: Aplicar Sub-Filtros de Estado
+  const filteredGroupedData = useMemo(() => {
+    if (!groupedData) return [];
+    let result = groupedData;
+
+    // Filtro por Informe de Estado (Status de Negocio)
+    if (subFilters?.status && subFilters.status !== 'all') {
+      result = result.filter(g => g.health.status === subFilters.status);
+    }
+
+    // Filtro por Semáforo de Stock (Visual)
+    if (subFilters?.health && subFilters.health !== 'all') {
+      result = result.filter(g => {
+        // Replicamos la lógica de getStockSemanticStyle para filtrar
+        const variants = data.filter((item) => {
+          const parts = item.sku.split('_');
+          const itemBaseSku = parts.length >= 2 ? parts.slice(0, 2).join('_').toLowerCase() : item.sku.toLowerCase();
+          return itemBaseSku === g.baseSku;
+        });
+
+        const stockBySize: Record<string, number> = {};
+        variants.forEach(v => {
+          const size = getCleanSize(v.sku, sizeMap) || 'UNK';
+          const val = Number((v as any).stock || (v as any).stockTienda || (v as any).stock_tienda) || 0;
+          stockBySize[size] = (stockBySize[size] || 0) + val;
+        });
+        const stocks = Object.values(stockBySize);
+
+        if (stocks.length === 0) return false; // Sin stock no entra en categorías activas
+
+        if (subFilters.health === 'incompleto') {
+          return stocks.some(s => s === 0);
+        }
+        if (subFilters.health === 'poco') {
+          return !stocks.some(s => s === 0) && stocks.some(s => s === 1);
+        }
+        if (subFilters.health === 'ok') {
+          return stocks.every(s => s >= 2);
+        }
+        return true;
+      });
+    }
+    return result;
+  }, [groupedData, subFilters, data, sizeMap]);
+
   // Resetear página cuando cambian los datos (filtros)
   useEffect(() => {
     setCurrentPage(1);
-  }, [groupedData]);
+  }, [filteredGroupedData]);
 
   // LÓGICA DE CORTE (SLICING)
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
   // Protegemos contra null/undefined aunque el hook suele devolver array vacío
-  const currentRows = groupedData ? groupedData.slice(indexOfFirstItem, indexOfLastItem) : [];
-  const totalPages = groupedData ? Math.ceil(groupedData.length / itemsPerPage) : 0;
+  const currentRows = filteredGroupedData ? filteredGroupedData.slice(indexOfFirstItem, indexOfLastItem) : [];
+  const totalPages = filteredGroupedData ? Math.ceil(filteredGroupedData.length / itemsPerPage) : 0;
 
   // Helper para colores de la tabla
   const getStatusColor = (status: string) => {
@@ -258,8 +305,53 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary, isMult
     }
   };
 
+  // Helper para semáforo de stock (NUEVO)
+  const getStockSemanticStyle = (baseSku: string): string => {
+    // 1. Filtrar variantes
+    const variants = data.filter((item) => {
+      const parts = item.sku.split('_');
+      const itemBaseSku = parts.length >= 2 ? parts.slice(0, 2).join('_').toLowerCase() : item.sku.toLowerCase();
+      return itemBaseSku === baseSku;
+    });
+
+    // 2. Agrupar stock por talla
+    const stockBySize: Record<string, number> = {};
+    
+    variants.forEach(v => {
+      const size = getCleanSize(v.sku, sizeMap) || 'UNK';
+      // Usamos v.stock con fallbacks para robustez
+      const val = Number((v as any).stock || (v as any).stockTienda || (v as any).stock_tienda) || 0;
+      
+      if (val < 0) {
+        console.log(`⚠️ [StockTable] Stock negativo detectado para SKU ${v.sku}: ${val}`);
+      }
+
+      stockBySize[size] = (stockBySize[size] || 0) + val;
+    });
+
+    const stocks = Object.values(stockBySize);
+    
+    // Clases base para consistencia visual
+    const baseClasses = "inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium border shadow-sm cursor-pointer transition-all hover:shadow-md";
+
+    if (stocks.length === 0) return `${baseClasses} bg-gray-50 text-gray-500 border-gray-200`;
+
+    // 1. 🔴 ROJO: Si AL MENOS UNA talla del grupo tiene stock === 0.
+    if (stocks.some(s => s === 0)) {
+      return `${baseClasses} bg-red-50 text-red-700 border-red-200`;
+    }
+
+    // 2. 🟡 AMARILLO: Si NO hay ceros, pero AL MENOS UNA talla tiene stock === 1.
+    if (stocks.some(s => s === 1)) {
+      return `${baseClasses} bg-yellow-50 text-yellow-700 border-yellow-200`;
+    }
+
+    // 3. 🟢 VERDE: Si TODAS las tallas tienen stock >= 2.
+    return `${baseClasses} bg-green-50 text-green-700 border-green-200`;
+  };
+
   // 2. LA CARA: Renderizado Visual
-  if (!groupedData || groupedData.length === 0) {
+  if (!filteredGroupedData || filteredGroupedData.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-64 bg-white rounded-lg border border-dashed border-gray-300">
         <p className="text-gray-500 text-lg">No hay productos que coincidan con los filtros.</p>
@@ -336,23 +428,12 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary, isMult
 
 {/* 3. Columna Stock: Restaurada (Estable) */}
                 <td className="whitespace-nowrap px-2 py-4 text-center">
-                  {isMultiStore ? (
-                    /* CASO 1: Modo Todas las Tiendas */
-                    <span 
-                      onClick={(e) => handleStockClick(e, group)}
-                      className={`text-xs font-bold cursor-pointer hover:text-blue-600 underline decoration-dotted underline-offset-2 px-2 py-1 rounded ${group.stock > 0 ? 'text-blue-700' : 'text-red-400'}`}
-                    >
-                      {group.stock}
-                    </span>
-                  ) : (
-                    /* CASO 2: Tienda Única */
-                    <span 
-                      onClick={(e) => handleStockClick(e, group)}
-                      className={`text-xs font-bold cursor-pointer hover:text-blue-600 underline decoration-dotted underline-offset-2 px-2 py-1 rounded ${group.stock > 0 ? 'text-blue-700' : 'text-red-400'}`}
-                    >
-                      {group.stock}
-                    </span>
-                  )}
+                  <span 
+                    onClick={(e) => handleStockClick(e, group)}
+                    className={getStockSemanticStyle(group.baseSku)}
+                  >
+                    {group.stock}
+                  </span>
                 </td>
 
                 {/* Columna Venta 2W: Restaurada (Estable) */}
@@ -445,7 +526,7 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary, isMult
 
         {/* Indicador de Resultados */}
         <div className="text-sm text-gray-600">
-          Mostrando <span className="font-bold text-gray-900">{indexOfFirstItem + 1}</span> - <span className="font-bold text-gray-900">{Math.min(indexOfLastItem, groupedData.length)}</span> de <span className="font-bold text-gray-900">{groupedData.length}</span> productos
+          Mostrando <span className="font-bold text-gray-900">{indexOfFirstItem + 1}</span> - <span className="font-bold text-gray-900">{Math.min(indexOfLastItem, filteredGroupedData.length)}</span> de <span className="font-bold text-gray-900">{filteredGroupedData.length}</span> productos
         </div>
 
         {/* Botones de Navegación */}
@@ -496,6 +577,7 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary, isMult
         variants={modalState.variants}
         health={modalState.health}
         sizeMap={sizeMap}
+        currentStoreName={currentStoreName}
       />
 
       {metricModal && (

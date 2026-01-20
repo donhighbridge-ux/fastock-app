@@ -1,14 +1,8 @@
-import React, { useMemo } from 'react';
-import type { NormalizedRow } from '../types';
+import React from 'react';
 
 interface DashboardFiltersProps {
-  data: NormalizedRow[];
-  onFilter: (filters: {
-    marca: string | null;
-    tienda: string | null;
-    area: string | null;
-    categoria: string | null;
-  }) => void;
+  data: any[];
+  onFilter: (filters: any) => void;
   onSearch: (term: string) => void;
   selectedFilters: {
     marca: string | null;
@@ -16,129 +10,73 @@ interface DashboardFiltersProps {
     area: string | null;
     categoria: string | null;
   };
-  areas?: string[];
-  categories?: string[];
+  areas: string[];
+  categories: string[];
 }
 
 const DashboardFilters: React.FC<DashboardFiltersProps> = ({ 
-  data, 
-  onFilter, 
-  onSearch, 
+  onFilter,
+  onSearch,
   selectedFilters,
-  areas = [],
-  categories = []
+  areas,
+  categories
 }) => {
-  const { marca, tienda, area, categoria } = selectedFilters;
-
-  // 1. Extract unique values for each filter using useMemo for optimization
-  const marcas = useMemo(() => {
-    const uniqueMarcas = [...new Set(data.map(item => item.marca))];
-    return uniqueMarcas.filter(m => m && m.trim() !== "").sort();
-  }, [data]);
-
-  const tiendas = useMemo(() => {
-    const sourceData = marca ? data.filter(d => d.marca === marca) : data;
-    const uniqueTiendas = [...new Set(sourceData.map(item => item.tiendaNombre))];
-    return uniqueTiendas.filter(t => t && t.trim() !== "").sort();
-  }, [data, marca]);
-
-  // 2. Handle filter changes
-  const handleMarcaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newMarca = e.target.value === '' ? null : e.target.value;
-    onFilter({ marca: newMarca, tienda: null, area: null, categoria: null });
-  };
-
-  const handleTiendaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newTienda = e.target.value === '' ? null : e.target.value;
-    onFilter({ marca, tienda: newTienda, area, categoria });
-  };
-
-  const handleAreaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newArea = e.target.value === '' ? null : e.target.value;
-    onFilter({ marca, tienda, area: newArea, categoria: null });
-  };
-
-  const handleCategoriaChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const newCategoria = e.target.value === '' ? null : e.target.value;
-    onFilter({ marca, tienda, area, categoria: newCategoria });
-  };
-
+  console.log('🎨 [Filters] DashboardFilters renderizado');
   return (
-    <div className="flex flex-row items-end gap-6 bg-white p-5 rounded-lg shadow-sm border border-gray-200 w-full">
-      {/* Marca Filter */}
-      <div className="flex flex-col items-center justify-center">
-        <label htmlFor="marca" className="text-[20px] font-bold text-gray-700 mb-2">Marca</label>
-        <select
-          id="marca"
-          className="w-40 text-center border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm py-2 border"
-          value={marca || ''}
-          onChange={handleMarcaChange}
-        >
-          <option value="">Todas</option>
-          {marcas.map(m => (
-            <option key={m} value={m}>{m}</option>
-          ))}
-        </select>
-      </div>
+    <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200 mb-6">
+      <div className="flex flex-col md:flex-row gap-4 items-end">
+        
+        {/* BUSCADOR DE SKU (Principal) */}
+        <div className="flex-1 w-full">
+          <label className="block text-xs font-medium text-gray-500 mb-1">Buscar SKU o Producto</label>
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Ej: 880822..."
+              onChange={(e) => onSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  onSearch(e.currentTarget.value);
+                  e.currentTarget.blur(); // Cierra el teclado en móviles
+                }
+              }}
+              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+            />
+            <span className="absolute left-3 top-2.5 text-gray-400">🔍</span>
+          </div>
+        </div>
 
-      {/* Tienda Filter */}
-      <div className="flex flex-col items-center justify-center">
-        <label htmlFor="tienda" className="text-[20px] font-bold text-gray-700 mb-2">Tienda</label>
-        <select
-          id="tienda"
-          className="w-40 text-center border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm py-2 border"
-          value={tienda || ''}
-          onChange={handleTiendaChange}
-        >
-          <option value="all">Todas</option>
-          {tiendas.map(t => (
-            <option key={t} value={t}>{t}</option>
-          ))}
-        </select>
-      </div>
+        {/* FILTRO 1: ÁREA */}
+        <div className="w-full md:w-48">
+          <label className="block text-xs font-medium text-gray-500 mb-1">Filtrar por Área</label>
+          <select
+            className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white cursor-pointer hover:border-gray-400 transition-colors"
+            value={selectedFilters.area || ''}
+            onChange={(e) => onFilter({ area: e.target.value || null, categoria: null })}
+          >
+            <option value="">Todas las Áreas</option>
+            {areas.map((area) => (
+              <option key={area} value={area}>{area}</option>
+            ))}
+          </select>
+        </div>
 
-      {/* Área Filter */}
-      <div className="flex flex-col items-center justify-center">
-        <label htmlFor="area" className="text-[20px] font-bold text-gray-700 mb-2">Área</label>
-        <select
-          id="area"
-          className="w-40 text-center border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm py-2 border"
-          value={area || ''}
-          onChange={handleAreaChange}
-        >
-          <option value="">Todas</option>
-          {areas.map((a: string) => (
-            <option key={a} value={a}>{a}</option>
-          ))}
-        </select>
-      </div>
+        {/* FILTRO 2: CATEGORÍA */}
+        <div className="w-full md:w-48">
+          <label className="block text-xs font-medium text-gray-500 mb-1">Filtrar por Categoría</label>
+          <select
+            className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white cursor-pointer hover:border-gray-400 transition-colors"
+            value={selectedFilters.categoria || ''}
+            onChange={(e) => onFilter({ categoria: e.target.value || null })}
+            disabled={!selectedFilters.area}
+          >
+            <option value="">Todas las Categorías</option>
+            {categories.map((cat) => (
+              <option key={cat} value={cat}>{cat}</option>
+            ))}
+          </select>
+        </div>
 
-      {/* Categoría Filter */}
-      <div className="flex flex-col items-center justify-center">
-        <label htmlFor="categoria" className="text-[20px] font-bold text-gray-700 mb-2">Categoría</label>
-        <select
-          id="categoria"
-          className="w-40 text-center border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm py-2 border"
-          value={categoria || ''}
-          onChange={handleCategoriaChange}
-        >
-          <option value="">Todas</option>
-          {categories.map((c: string) => (
-            <option key={c} value={c}>{c}</option>
-          ))}
-        </select>
-      </div>
-
-      {/* Buscador */}
-      <div className="ml-auto flex flex-col items-center justify-center">
-        <label htmlFor="search" className="text-sm font-bold text-gray-700 mb-2">Buscar SKU</label>
-        <input
-          type="text"
-          id="search"
-          className="w-64 pl-3 pr-3 py-2 text-center border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm border"
-          placeholder="Buscar..."
-          onChange={(e) => onSearch(e.target.value)}
-        />
       </div>
     </div>
   );
