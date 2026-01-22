@@ -66,8 +66,9 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ step, options, onSelect, 
   );
 };
 
-const Sidebar = ({ currentView, setCurrentView }: { currentView: 'dashboard' | 'upload' | 'cart' | 'tracking', setCurrentView: (t: 'dashboard' | 'upload' | 'cart' | 'tracking') => void }) => {
+const Sidebar = ({ currentView, setCurrentView, currentStore }: { currentView: 'dashboard' | 'upload' | 'cart' | 'tracking', setCurrentView: (t: 'dashboard' | 'upload' | 'cart' | 'tracking') => void, currentStore: string | null }) => {
   const { requestList, trackingList } = useCart();
+  const isStoreSelected = currentStore && currentStore !== ALL_STORES_ID;
 
   return (
     <aside className="w-64 bg-slate-900 flex-shrink-0 flex flex-col h-full text-white border-r border-slate-800 shadow-xl z-20">
@@ -92,33 +93,37 @@ const Sidebar = ({ currentView, setCurrentView }: { currentView: 'dashboard' | '
           📤 Carga de Datos
         </button>
 
-        <button
-          onClick={() => setCurrentView('cart')}
-          className={`w-full text-left px-4 py-3 rounded-lg transition-colors flex justify-between items-center ${
-            currentView === 'cart' ? 'bg-slate-800 text-white' : 'text-gray-400 hover:bg-slate-800 hover:text-white'
-          }`}
-        >
-          <span className="flex items-center gap-2">🛒 Solicitud</span>
-          {requestList.length > 0 && (
-            <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
-              {requestList.length}
-            </span>
-          )}
-        </button>
+        {isStoreSelected && (
+          <>
+            <button
+              onClick={() => setCurrentView('cart')}
+              className={`w-full text-left px-4 py-3 rounded-lg transition-colors flex justify-between items-center ${
+                currentView === 'cart' ? 'bg-slate-800 text-white' : 'text-gray-400 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <span className="flex items-center gap-2">🛒 Solicitud</span>
+              {requestList.length > 0 && (
+                <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
+                  {requestList.length}
+                </span>
+              )}
+            </button>
 
-        <button
-          onClick={() => setCurrentView('tracking')}
-          className={`w-full text-left px-4 py-3 rounded-lg transition-colors flex justify-between items-center ${
-            currentView === 'tracking' ? 'bg-slate-800 text-white' : 'text-gray-400 hover:bg-slate-800 hover:text-white'
-          }`}
-        >
-          <span className="flex items-center gap-2">👁️ Seguimiento</span>
-          {trackingList.length > 0 && (
-            <span className="bg-blue-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
-              {trackingList.length}
-            </span>
-          )}
-        </button>
+            <button
+              onClick={() => setCurrentView('tracking')}
+              className={`w-full text-left px-4 py-3 rounded-lg transition-colors flex justify-between items-center ${
+                currentView === 'tracking' ? 'bg-slate-800 text-white' : 'text-gray-400 hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <span className="flex items-center gap-2">👁️ Seguimiento</span>
+              {trackingList.length > 0 && (
+                <span className="bg-blue-500 text-white text-xs font-bold px-2 py-0.5 rounded-full min-w-[20px] text-center">
+                  {trackingList.length}
+                </span>
+              )}
+            </button>
+          </>
+        )}
       </nav>
     </aside>
   );
@@ -174,6 +179,14 @@ function App() {
     }, 400); 
     return () => clearTimeout(timer);
   }, [searchTermInput]);
+
+  // Lógica de Redirección (Auto-Redirect)
+  useEffect(() => {
+    if ((!currentFilters.tienda || currentFilters.tienda === ALL_STORES_ID) && (currentView === 'cart' || currentView === 'tracking')) {
+      console.warn('🔒 [App] Redireccionando a Dashboard: Vista global no permitida en operaciones');
+      setCurrentView('dashboard');
+    }
+  }, [currentFilters.tienda, currentView]);
 
   // 2. EFECTO MAESTRO DE FILTRADO (El Cerebro Central)
   // Escucha cambios en Data, Filtros O Búsqueda y actualiza la tabla UNA sola vez.
@@ -430,7 +443,7 @@ function App() {
   return (
     <CartProvider>
     <div className="flex h-screen w-full bg-red-600 overflow-hidden">
-      <Sidebar currentView={currentView} setCurrentView={setCurrentView} />
+      <Sidebar currentView={currentView} setCurrentView={setCurrentView} currentStore={currentFilters.tienda} />
 
       <main className="flex-1 flex flex-col h-full overflow-hidden relative">
         <div className="absolute top-6 right-8 z-30">

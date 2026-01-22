@@ -4,9 +4,10 @@ import type { NormalizedRow } from '../types';
 
 interface TrackingListViewProps {
   currentData: NormalizedRow[];
+  currentStore: string | null;
 }
 
-const TrackingListView: React.FC<TrackingListViewProps> = ({ currentData }) => {
+const TrackingListView: React.FC<TrackingListViewProps> = ({ currentData, currentStore }) => {
   const { trackingList, removeFromTracking } = useCart();
 
   if (trackingList.length === 0) {
@@ -35,12 +36,11 @@ const TrackingListView: React.FC<TrackingListViewProps> = ({ currentData }) => {
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {trackingList.map((item) => {
-              // Lógica de Cruce: Buscar variantes en currentData que coincidan con el SKU base
-              const variants = currentData.filter(d => {
-                const parts = d.sku.split('_');
-                const base = parts.length >= 2 ? parts.slice(0, 2).join('_').toLowerCase() : d.sku.toLowerCase();
-                return base === item.sku.toLowerCase();
-              });
+              // Filtro robusto: Coincidencia de SKU base Y coincidencia exacta de nombre de tienda
+              const variants = currentData.filter(d =>
+                d.sku.toLowerCase().startsWith(item.sku.toLowerCase()) &&
+                d.tiendaNombre === currentStore
+              );
 
               // Calcular totales
               const totalCD = variants.reduce((sum, v) => sum + (Number(v.stock_cd) || 0), 0);
