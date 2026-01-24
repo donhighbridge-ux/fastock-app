@@ -51,11 +51,11 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
 
   // Datos del producto
   const productTitle = variants[0]?.description || 'Producto Sin Nombre';
-  const baseSku = variants[0]?.sku?.split('_')[0] || 'N/A';
+  const groupSku = variants[0]?.sku?.split('_').slice(0, 2).join('_') || 'N/A';
 
   // Verificación de seguimiento (Solo chequea visualmente si ya lo sigues en ESTA tienda)
   const isTracked = trackingList.some(
-    item => item.sku === baseSku && item.originStore === currentStoreName
+    item => item.sku === groupSku && item.originStore === currentStoreName
   );
 
   const toggleSize = (size: string) => {
@@ -78,7 +78,7 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
     }
 
     addToRequest({
-      sku: baseSku,
+      sku: groupSku,
       sizes: selectedSizes,
       area: variants[0]?.area || 'General',
       description: productTitle,
@@ -94,7 +94,7 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
   const handleAddToRequestFromSuggestion = (sizes: string[]) => {
     if (isReadOnlyMode) return; // Bloqueo de seguridad
     addToRequest({
-      sku: baseSku,
+      sku: groupSku,
       sizes: sizes,
       area: variants[0]?.area || 'General',
       description: productTitle,
@@ -108,7 +108,7 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
   const handleAddToTracking = () => {
     if (isReadOnlyMode) return; // Bloqueo de seguridad
     addToTracking({
-      sku: baseSku,
+      sku: groupSku,
       description: productTitle,
       timestamp: Date.now(),
       originStore: currentStoreName! // Firmamos con la tienda
@@ -186,7 +186,7 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
           <div>
             <h2 className="text-xl font-bold text-gray-900">{productTitle}</h2>
             <p className="text-sm text-gray-500 font-mono flex items-center gap-2">
-              SKU: {baseSku}
+              SKU: {groupSku}
               {/* Badge de Tienda */}
               <span className={`px-2 py-0.5 rounded text-xs border ${isReadOnlyMode ? 'bg-gray-100 text-gray-500 border-gray-200' : 'bg-blue-50 text-blue-700 border-blue-100'}`}>
                 📍 {isReadOnlyMode ? 'Vista Global (Lectura)' : currentStoreName}

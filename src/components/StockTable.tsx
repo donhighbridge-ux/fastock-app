@@ -1,7 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import type { NormalizedRow, StockHealth } from '../types'; // Asegúrate de importar tus tipos reales si los tienes
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '../firebase-config';
 import StockDetailModal from './StockDetailModal';
 import { useStockGrouping } from '../hooks/useStockGrouping';
 import SimpleMetricModal from './SimpleMetricModal';
@@ -16,9 +14,10 @@ interface StockTableProps {
   searchTerm?: string;
   currentStoreName?: string;
   subFilters?: { health: string; status: string };
+  sizeMap: Record<string, string>;
 }
 
-const StockTable: React.FC<StockTableProps> = ({ data, productDictionary, isMultiStore = false, searchTerm = '', currentStoreName, subFilters }) => {
+const StockTable: React.FC<StockTableProps> = ({ data, productDictionary, isMultiStore = false, searchTerm = '', currentStoreName, subFilters, sizeMap }) => {
   
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
@@ -42,28 +41,9 @@ const StockTable: React.FC<StockTableProps> = ({ data, productDictionary, isMult
 
   console.log("🔄 [DEBUG] Render StockTable. MetricModal State:", metricModal);
 
-  // Estado para el mapa de tallas dinámico
-  const [sizeMap, setSizeMap] = useState<Record<string, string>>({});
-
   // ESTADO DE PAGINACIÓN
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
-
-  // Fetch del mapa de tallas desde Firebase al montar
-  useEffect(() => {
-    const fetchSizeMap = async () => {
-      try {
-        const docRef = doc(db, 'configuration', 'general');
-        const snap = await getDoc(docRef);
-        if (snap.exists() && snap.data().sizeMap) {
-          setSizeMap(snap.data().sizeMap);
-        }
-      } catch (error) {
-        console.error('Error fetching size map:', error);
-      }
-    };
-    fetchSizeMap();
-  }, []);
 
   const handleOpenModal = (baseSku: string, health: StockHealth) => {
     console.log("🔘 [DEBUG] Click detectado. BaseSKU:", baseSku, "Health:", health);

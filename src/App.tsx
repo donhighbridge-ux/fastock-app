@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { collection, onSnapshot, getDocs, writeBatch, doc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, getDocs, writeBatch, doc, deleteDoc, getDoc } from 'firebase/firestore';
 import { db } from './firebase-config';
 import { CartProvider, useCart } from './context/CartContext';
 import FileUpload from './components/FileUpload';
@@ -135,6 +135,7 @@ function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [productDictionary, setProductDictionary] = useState<Record<string, string>>({});
   const [currentView, setCurrentView] = useState<'dashboard' | 'upload' | 'cart' | 'tracking'>('dashboard');
+  const [sizeMap, setSizeMap] = useState<Record<string, string>>({});
   const [currentFilters, setCurrentFilters] = useState<{
     marca: string | null;
     tienda: string | null;
@@ -169,6 +170,22 @@ function App() {
 
   useEffect(() => {
     fetchStockData();
+  }, []);
+
+  // Fetch del mapa de tallas desde Firebase al montar (Centralizado)
+  useEffect(() => {
+    const fetchSizeMap = async () => {
+      try {
+        const docRef = doc(db, 'configuration', 'general');
+        const snap = await getDoc(docRef);
+        if (snap.exists() && snap.data().sizeMap) {
+          setSizeMap(snap.data().sizeMap);
+        }
+      } catch (error) {
+        console.error('Error fetching size map:', error);
+      }
+    };
+    fetchSizeMap();
   }, []);
 
   // 1. EFECTO DE DEBOUNCE (Solo actualiza el término de búsqueda, NO FILTRA)
@@ -525,6 +542,7 @@ function App() {
                       searchTerm={currentSearchTerm}
                       currentStoreName={currentFilters.tienda || 'Global'}
                       subFilters={subFilters}
+                      sizeMap={sizeMap}
                     />
                   </div>
                 </>
@@ -576,6 +594,7 @@ function App() {
               <TrackingListView 
                 currentData={data} 
                 currentStore={currentFilters.tienda}
+                sizeMap={sizeMap}
               />
             </div>
           )}

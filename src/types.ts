@@ -1,33 +1,53 @@
 /**
- * Representa una fila de datos de stock después de ser normalizada desde el CSV.
- * Esta es la estructura "larga" que se sube a Firestore.
+ * src/types.ts
+ * LA LEY. Define estrictamente qué constituye un dato válido en nuestro universo.
+ * No se permite ambigüedad.
  */
+
 export interface NormalizedRow {
+  // Identidad del Producto (Inmutable)
   sku: string;
   description: string;
   marca: string;
-  tiendaNombre: string;
-  area: string;
   categoria: string;
+  area: string;
 
-  // Métricas de Negocio (Numéricas)
-  stock: number;      // Stock Local
-  sales2w: number;    // Venta 2 Semanas
-  transit: number;    // En Tránsito
-  ra: number;         // Reposición Automática
-  stock_cd: number;   // Stock en Centro de Distribución
+  // Contexto de Ubicación
+  tiendaId: string;     // Obligatorio. Sin ID no hay trazabilidad.
+  tiendaNombre: string;
 
-  tiendaId?: string;
-  [key: string]: any;
+  // Métricas de Negocio (El Núcleo Numérico)
+  // Todo debe ser numérico. Nada de strings, nada de nulls.
+  stock: number;      // Stock Físico en Tienda
+  transit: number;    // Stock en Tránsito hacia la tienda
+  stock_cd: number;   // Stock Disponible en Bodega Central
+  sales2w: number;    // Velocidad de venta (2 semanas)
+  ra: number;         // Reposición Automática (Target)
 }
 
-/**
- * Representa un ítem en el diccionario de productos.
- * Contiene metadatos amigables para un SKU específico.
- */
+// Nota: Eliminamos ProductDictionaryItem de aquí si no se usa en la lógica crítica, 
+// o lo mantenemos separado. Por ahora nos enfocamos en NormalizedRow.
 export interface ProductDictionaryItem {
   sku: string;
-  name: string; // El nombre amigable, ej: "Polera Logo Clásico"
+  name: string;
   category: string;
   area: string;
+}
+
+// ==========================================
+// 3. CAPA DE VISUALIZACIÓN (UI TYPES)
+// ==========================================
+// Estos tipos no existen en la base de datos. 
+// Son estructuras calculadas en memoria para el semáforo del Frontend.
+
+export type StockStatus = 'STOCK OK' | 'EN TRÁNSITO' | 'PIDE SOLO...' | 'NADA EN EL CD';
+
+export interface StockHealth {
+  status: StockStatus;
+  emoji: string;
+  details: {
+    coming: string[];  // Tallas que vienen viajando
+    request: string[]; // Tallas que se pueden pedir al CD
+    dead: string[];    // Tallas muertas (sin stock ni reposición)
+  };
 }
