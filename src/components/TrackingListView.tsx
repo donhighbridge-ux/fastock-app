@@ -1,140 +1,110 @@
 import React, { useState } from 'react';
-import { useCart } from '../context/CartContext';
-import type { NormalizedRow } from '../types';
-import SmartTrackingModal from './SmartTrackingModal';
+import type { GroupedProduct, StockStatus } from '../types'; // <--- Usamos el tipo procesado
+// import { SmartTrackingModal } from './SmartTrackingModal'; // Comentado hasta que lo creemos
+// import { SimpleMetricModal } from './SimpleMetricModal';   // Comentado hasta que lo creemos
 
 interface TrackingListViewProps {
-  currentData: NormalizedRow[];
-  currentStore: string | null;
+  currentData: GroupedProduct[]; // <--- EL CAMBIO CLAVE. Ya no es NormalizedRow.
+  currentStore: string;
   sizeMap: Record<string, string>;
+  onToggleStar: (sku: string) => void;
+  starredSkus: Set<string>;
 }
 
-const TrackingListView: React.FC<TrackingListViewProps> = ({ currentData, currentStore, sizeMap }) => {
-  const { trackingList, removeFromTracking } = useCart();
-  const [activeModal, setActiveModal] = useState<{ isOpen: boolean; sku: string; mode: 'cd' | 'transit' | 'status' }>({
-    isOpen: false,
-    sku: '',
-    mode: 'status'
-  });
+const getStatusColor = (status: StockStatus) => {
+  switch (status) {
+    case 'STOCK OK': return 'bg-green-100 text-green-800 border-green-200';
+    case 'EN TRÁNSITO': return 'bg-orange-100 text-orange-800 border-orange-200';
+    case 'PIDE SOLO...': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+    case 'NADA EN EL CD': return 'bg-red-100 text-red-800 border-red-200';
+    default: return 'bg-gray-100 text-gray-800';
+  }
+};
 
-  const handleOpenCD = (sku: string) => {
-    console.log('🔘 Click CD...', sku);
-    setActiveModal({ isOpen: true, sku, mode: 'cd' });
-  };
+export const TrackingListView: React.FC<TrackingListViewProps> = ({ 
+  currentData, 
+  currentStore, 
+  // sizeMap, // Lo dejamos aquí por si se usa en los modales futuros
+  onToggleStar,
+  starredSkus
+}) => {
+  const [selectedItem, setSelectedItem] = useState<GroupedProduct | null>(null);
+  
+  // Placeholder simple para métricas hasta que reactivemos los modales
+  const showMetric = (label: string, val: number) => alert(`${label}: ${val}`);
 
-  const handleOpenTransit = (sku: string) => {
-    console.log('🔘 Click Tránsito...', sku);
-    setActiveModal({ isOpen: true, sku, mode: 'transit' });
-  };
-
-  const handleOpenStatus = (sku: string) => {
-    console.log('🔘 Click Estado...', sku);
-    setActiveModal({ isOpen: true, sku, mode: 'status' });
-  };
-
-  // Helper para filtrado estricto (Blindaje)
-  const getFilteredVariants = (baseSku: string) => {
-    const targetSku = baseSku.toLowerCase();
-    const targetStore = currentStore?.trim();
-
-    return currentData.filter(d => {
-      const candidateSku = d.sku.toLowerCase();
-      // SKU Token Match: Exact match OR starts with target + '_' (Evita GP1 vs GP10)
-      const skuMatch = candidateSku === targetSku || candidateSku.startsWith(targetSku + '_');
-      // Store Match: Strict trim comparison
-      const storeMatch = d.tiendaNombre?.trim() === targetStore;
-      return skuMatch && storeMatch;
-    });
-  };
-
-  if (trackingList.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 bg-white rounded-lg border border-dashed border-gray-300 p-8">
-        <span className="text-4xl mb-4">👁️</span>
-        <h3 className="text-lg font-medium text-gray-900">No estás siguiendo ningún producto</h3>
-        <p className="text-gray-500">Usa el botón "Seguimiento" en el detalle de un producto para agregarlo aquí.</p>
-      </div>
-    );
+  if (!currentData || currentData.length === 0) {
+    return <div className="p-8 text-center text-gray-500">No hay datos para mostrar.</div>;
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-      <div className="overflow-x-auto">
+    <div className="space-y-4">
+      <div className="flex justify-between items-center mb-4">
+        <h2 className="text-xl font-bold text-gray-800">Tablero: {currentStore || 'Global'}</h2>
+        <span className="text-sm text-gray-500">{currentData.length} SKUs</span>
+      </div>
+
+      <div className="bg-white rounded-lg shadow overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descripción</th>
-              <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Stock CD Total</th>
-              <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Tránsito Total</th>
-              <th scope="col" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-              <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Acciones</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Producto</th>
+              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Estado</th>
+              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Stock</th>
+              <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase">Acciones</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {trackingList.map((item) => {
-              // Filtro robusto usando la función helper
-              const variants = getFilteredVariants(item.sku);
-
-              // Calcular totales con Normalización de Datos (Defensive Coding)
-              const totalCD = variants.reduce((sum, v) => {
-                const val = Number((v as any).stock_cd ?? (v as any).stockCD ?? 0);
-                return sum + val;
-              }, 0);
-              const totalTransit = variants.reduce((sum, v) => {
-                const val = Number((v as any).transit ?? (v as any).transito ?? 0);
-                return sum + val;
-              }, 0);
-
-              // Visualización Limpia (SKU Formatter: ESTILO_COLOR)
-              const displaySku = (variants[0]?.sku || item.sku).split('_').slice(0, 2).join('_');
+            {currentData.map((row) => {
+              // SIN ANY. TypeScript sabe que row es GroupedProduct y tiene .health
+              const { health } = row; 
               
-              const isAvailable = totalCD > 0 || totalTransit > 0;
-
               return (
-                <tr key={item.sku} className={isAvailable ? "bg-green-50" : ""}>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-mono text-gray-900">{displaySku}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.description}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-gray-700">
-                    {totalCD > 0 ? (
-                      <button onClick={() => handleOpenCD(item.sku)} className="text-blue-600 hover:underline decoration-dotted underline-offset-2">
-                        {totalCD}
-                      </button>
-                    ) : (
-                      <span className="text-gray-400">0</span>
-                    )}
+                <tr key={row.baseSku} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-4 py-4 whitespace-nowrap">
+                    <div>
+                      <div className="text-sm font-medium text-gray-900">{row.name}</div>
+                      <div className="text-xs text-gray-500">{row.baseSku}</div>
+                    </div>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-orange-600">
-                    {totalTransit > 0 ? (
-                      <button onClick={() => handleOpenTransit(item.sku)} className="text-orange-600 hover:underline decoration-dotted underline-offset-2">
-                        {totalTransit}
-                      </button>
-                    ) : (
-                      <span className="text-gray-400">0</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center text-sm">
-                    {totalCD > 0 ? (
-                      <button onClick={() => handleOpenStatus(item.sku)} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-800 hover:scale-105 transition-transform shadow-sm animate-pulse">
-                        ¡Llegaron Unidades!
-                      </button>
-                    ) : totalTransit > 0 ? (
-                      <button onClick={() => handleOpenStatus(item.sku)} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-orange-100 text-orange-800 hover:scale-105 transition-transform shadow-sm">
-                        En Tránsito
-                      </button>
-                    ) : (
-                      <button onClick={() => handleOpenStatus(item.sku)} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors">
-                        Sin Novedades
-                      </button>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => removeFromTracking(item.sku)}
-                      className="text-red-600 hover:text-red-900"
+
+                  <td className="px-4 py-4 whitespace-nowrap text-center">
+                    <span 
+                      className={`px-3 py-1 inline-flex text-xs leading-5 font-semibold rounded-full border ${getStatusColor(health.status)}`}
                     >
-                      Dejar de seguir
+                      {health.emoji} {health.status}
+                    </span>
+                  </td>
+
+                  <td className="px-4 py-4 whitespace-nowrap text-center text-sm text-gray-500">
+                    <div className="flex justify-center space-x-4">
+                      <div className="cursor-pointer font-bold" onClick={() => showMetric('Stock Local', row.stock)}>
+                        {row.stock} <span className="text-xs font-normal block">Loc</span>
+                      </div>
+                      
+                      {row.transit > 0 && (
+                        <div className="cursor-pointer text-orange-600 font-bold" onClick={() => showMetric('En Tránsito', row.transit)}>
+                          +{row.transit} <span className="text-xs font-normal block">Viaje</span>
+                        </div>
+                      )}
+
+                      {row.stock_cd > 0 && (
+                        <div className="cursor-pointer text-purple-600 font-bold" onClick={() => showMetric('Stock CD', row.stock_cd)}>
+                          {row.stock_cd} <span className="text-xs font-normal block">CD</span>
+                        </div>
+                      )}
+                    </div>
+                  </td>
+
+                  <td className="px-4 py-4 whitespace-nowrap text-center">
+                    <button 
+                      onClick={() => onToggleStar(row.baseSku)}
+                      className={`text-xl ${starredSkus.has(row.baseSku) ? 'text-yellow-400' : 'text-gray-300'}`}
+                    >
+                      ★
                     </button>
+                    {/* Botón de análisis desactivado temporalmente hasta tener el modal */}
+                    {/* <button onClick={() => setSelectedItem(row)} ... >Ver</button> */}
                   </td>
                 </tr>
               );
@@ -142,18 +112,8 @@ const TrackingListView: React.FC<TrackingListViewProps> = ({ currentData, curren
           </tbody>
         </table>
       </div>
-
-      {activeModal.isOpen && (
-        <SmartTrackingModal
-          isOpen={activeModal.isOpen}
-          onClose={() => setActiveModal(prev => ({ ...prev, isOpen: false }))}
-          variants={getFilteredVariants(activeModal.sku)}
-          mode={activeModal.mode}
-          currentStoreName={currentStore || 'Global'}
-        />
-      )}
+      
+      {/* Aquí irían los modales cuando existan los archivos */}
     </div>
   );
 };
-
-export default TrackingListView;

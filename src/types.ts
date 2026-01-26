@@ -51,3 +51,33 @@ export interface StockHealth {
     dead: string[];    // Tallas muertas (sin stock ni reposición)
   };
 }
+
+// ==========================================
+// 4. CAPA DE NEGOCIO (AGREGADOS)
+// ==========================================
+// Este es el objeto "Enriquecido" que devuelve useStockGrouping.
+// Contiene la data sumada y el diagnóstico de salud.
+
+export interface GroupedProduct {
+  baseSku: string;
+  name: string;
+  originalSku: string;
+  
+  // Métricas Agregadas
+  stock: number;
+  transit: number;
+  stock_cd: number;
+  sales2w: number;
+  ra: number;
+  
+  // Diagnóstico
+  health: StockHealth; // <--- AQUÍ ESTÁ LA MAGIA. Tipado estricto.
+
+  // UI Helpers
+  comingSizes: string[];
+  requestSizes: string[];
+  deadSizes: string[];
+  hasZero: boolean;
+  hasOne: boolean;
+  storeName?: string;
+}

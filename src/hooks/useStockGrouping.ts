@@ -1,14 +1,15 @@
 import { useMemo } from 'react';
-import type { NormalizedRow, StockHealth, StockStatus } from '../types';
+import type { NormalizedRow, StockHealth, StockStatus, GroupedProduct } from '../types'; // <--- Importa GroupedProduct
 import { getCleanSize } from '../utils/stockUtils';
 
+// Cambia el tipo de retorno explícitamente a GroupedProduct[]
 export const useStockGrouping = (
   data: NormalizedRow[], 
   productDictionary: Record<string, string>, 
   sizeMap: Record<string, string>,
   searchTerm: string = '',
   isMultiStore: boolean = false
-) => {
+): GroupedProduct[] => { // <--- TIPADO ESTRICTO DE SALIDA
   const groupedData = useMemo(() => {
     const groups: Record<string, {
       baseSku: string;
@@ -127,7 +128,7 @@ export const useStockGrouping = (
         result = result.filter((group) => group.stock > 0 || group.transit > 0);
     }
 
-    return result;
+    return result as GroupedProduct[]; // Cast final seguro porque construimos el objeto correctamente
   }, [data, productDictionary, sizeMap, searchTerm, isMultiStore]);
 
   return groupedData;
