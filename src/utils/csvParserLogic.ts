@@ -1,66 +1,78 @@
-/**
- * src/utils/csvParserLogic.ts
- * EL MOTOR DE INGESTA.
- * Responsabilidad Única: Convertir texto CSV crudo en NormalizedRow[] válido.
- * No toma decisiones de negocio. Solo normaliza.
- */
-
 import Papa from 'papaparse';
-import Logger from './logger'; // Asumo que tienes esto, si no usa console
+import Logger from './logger'; 
 import type { NormalizedRow, ProductDictionaryItem } from '../types';
-import { METRIC_MAPPINGS, STORE_BLACKLIST, MetricKey } from './csvConfig';
+import { METRIC_MAPPINGS, STORE_BLACKLIST } from './csvConfig';
 
-// --- HELPERS PUROS (Nivel 1: Limpieza) ---
+// Definimos interfaces locales aquí para asegurar que TS las vea
+interface StoreRange { 
+  name: string; 
+  startIndex: number; 
+  endIndex: number; 
+}
 
-const cleanNumber = (val: any): number => {
+interface CurrentStoreState {
+  name: string;
+  start: number;
+}
+
+// --- HELPERS (Limpieza) ---
+
+const cleanNumber = (val: unknown): number => {
   if (typeof val === 'number') return val;
-  if (!val || typeof val !== 'string') return 0;
-  const num = parseFloat(val.replace(/,/g, '').trim());
-  return isNaN(num) ? 0 : num;
+  if (typeof val === 'string') {
+    const cleaned = val.replace(/[^0-9.-]/g, ''); 
+    const num = parseFloat(cleaned);
+    return isNaN(num) ? 0 : num;
+  }
+  return 0;
 };
 
 const normalizeStr = (str: string): string => 
   (str || '').toLowerCase().trim().replace(/_/g, ' ');
 
-// --- MOTOR PRINCIPAL ---
+// --- PARSER PRINCIPAL ---
 
 export const parseAndNormalizeCsv = (csvText: string): Promise<NormalizedRow[]> => {
   return new Promise((resolve, reject) => {
     Papa.parse(csvText, {
-      header: false, // Leemos como matriz primero para detectar la estructura
+      header: false,
       skipEmptyLines: true,
       complete: (results) => {
         try {
           const rawData = results.data as string[][];
-          if (rawData.length < 2) throw new Error("El archivo está vacío o incompleto.");
+          if (!rawData || rawData.length < 3) throw new Error("Archivo CSV estructura inválida.");
 
-          // 1. DETECCIÓN DE ESTRUCTURA
-          // Asumimos Fila 0: Nombres de Tiendas
-          // Asumimos Fila 1: Nombres de Métricas (Stock, Tránsito, etc.)
+          Logger.log("Iniciando análisis estructural...");
+
+          // 1. Detección de Cabeceras
           const headerRow0 = rawData[0].map(normalizeStr);
           const headerRow1 = rawData[1].map(normalizeStr);
 
-          // 2. MAPEO DE TIENDAS
-          // Identificamos dónde empieza cada tienda y su rango de columnas
-          const storeMap: Array<{ name: string, startIndex: number, endIndex: number }> = [];
-          
-          let currentStore: { name: string, start: number } | null = null;
+          // 2. Mapeo de Tiendas (Tipado Estricto para evitar 'never')
+          const storeMap: StoreRange[] = []; // <--- TIPADO EXPLÍCITO AQUÍ ES CRÍTICO
+          let currentStore: CurrentStoreState | null = null; // <--- TIPADO EXPLÍCITO AQUÍ
 
-          headerRow0.forEach((cell, index) => {
-            if (cell && !STORE_BLACKLIST.some(b => cell.includes(b))) {
-              // Encontramos una nueva tienda potencial
-              if (currentStore) {
-                // Cerramos la anterior
-                storeMap.push({ 
-                  name: currentStore.name, 
-                  startIndex: currentStore.start, 
-                  endIndex: index - 1 
-                });
-              }
-              currentStore = { name: cell, start: index };
-            }
-          });
-          // Cerrar la última tienda
+          // En lugar de .forEach, usamos for clásico.
+// Esto mantiene el contexto y hace feliz al compilador paranoico.
+
+for (let index = 0; index < headerRow0.length; index++) {
+  const cell = headerRow0[index];
+  const isPotentialStore = cell && cell.length > 2 && !STORE_BLACKLIST.some(b => cell.includes(b));
+
+  if (isPotentialStore) {
+    if (currentStore) {
+      storeMap.push({ 
+        name: currentStore.name, 
+        startIndex: currentStore.start, 
+        endIndex: index - 1 
+      });
+    }
+    // TypeScript confía en esto porque no hay cambio de función
+    currentStore = { name: cell, start: index };
+  }
+}
+          
+          // Cerrar la última
           if (currentStore) {
              storeMap.push({ 
                name: currentStore.name, 
@@ -69,80 +81,65 @@ export const parseAndNormalizeCsv = (csvText: string): Promise<NormalizedRow[]> 
              });
           }
 
-          Logger.log(`🏢 Tiendas detectadas: ${storeMap.length}`);
+          if (storeMap.length === 0) throw new Error("No se detectaron tiendas.");
 
-          // 3. EXTRACCIÓN DE DATOS
+          // 3. Extracción
           const normalizedData: NormalizedRow[] = [];
           
-          // Iteramos desde la fila 2 (datos reales)
           for (let i = 2; i < rawData.length; i++) {
             const row = rawData[i];
-            // Asumimos col 0 es SKU, col 1 es Descripción (Ajustar según tu Excel real si es distinto)
-            // Si SKU está vacío, saltamos
-            if (!row[0]) continue; 
+            const sku = row[0]?.trim();
+            if (!sku) continue; 
 
             const baseProduct = {
-              sku: row[0].trim(),
+              sku: sku,
               description: row[1]?.trim() || 'Sin Descripción',
-              marca: '', // Llenar si existe columna
-              categoria: '', // Llenar si existe columna
-              area: '' // Llenar si existe columna
+              marca: '', categoria: '', area: '' 
             };
 
-            // Para cada tienda detectada, extraemos sus métricas
             storeMap.forEach(store => {
-              // Crear el objeto fila base
               const normalizedRow: NormalizedRow = {
                 ...baseProduct,
-                tiendaId: store.name.replace(/\s+/g, '_').toLowerCase(), // ID generado simple
+                tiendaId: store.name.replace(/[^a-z0-9]/g, '_'),
                 tiendaNombre: store.name.toUpperCase(),
-                stock: 0,
-                transit: 0,
-                stock_cd: 0,
-                sales2w: 0,
-                ra: 0
+                stock: 0, transit: 0, stock_cd: 0, sales2w: 0, ra: 0
               };
 
-              // Escáner Multiespectral: Buscamos cada métrica dentro del rango de la tienda
               let hasData = false;
 
               METRIC_MAPPINGS.forEach(mapping => {
-                // Buscamos en la fila de cabecera 1, DENTRO del rango de esta tienda
                 for (let col = store.startIndex; col <= store.endIndex; col++) {
-                   const headerMetricName = headerRow1[col];
-                   // ¿Coincide este encabezado con alguno de los alias? (ej: "tránsito" == "transit")
-                   if (mapping.aliases.some(alias => headerMetricName.includes(alias))) {
+                   const headerName = headerRow1[col];
+                   if (mapping.aliases.some(alias => headerName.includes(alias))) {
                      const val = cleanNumber(row[col]);
                      normalizedRow[mapping.targetField] = val;
-                     if (val > 0) hasData = true;
-                     break; // Encontramos la columna para esta métrica, dejamos de buscar
+                     if (val !== 0) hasData = true;
+                     break; 
                    }
                 }
               });
 
-              // Solo guardamos si hay ALGÚN dato relevante (evitar millones de filas de ceros)
-              // OJO: Si quieres guardar ceros explícitos para borrar stock anterior, quita el if(hasData).
-              // Para Palantir, a veces el 0 es información. Tú decides. Por ahora filtramos para optimizar.
-              if (hasData) {
-                normalizedData.push(normalizedRow);
-              }
+              if (hasData) normalizedData.push(normalizedRow);
             });
           }
 
-          Logger.log(`✅ Procesamiento completado. Filas generadas: ${normalizedData.length}`);
           resolve(normalizedData);
-
-        } catch (error) {
-          Logger.error("🔥 Error crítico en parser:", error);
-          reject(error);
+        } catch (error: unknown) {
+          const msg = error instanceof Error ? error.message : "Error desconocido";
+          Logger.error("Parser Error:", msg);
+          reject(new Error(msg));
         }
       }
     });
   });
 };
 
-// Mantenemos la función de diccionario aparte si la necesitas, o la modularizamos igual.
-export const parseDictionaryCsv = (csvText: string): Promise<any> => {
-    // Implementación similar simplificada...
-    return Promise.resolve([]); 
+// --- STUB DICCIONARIO (Corrección de unused var) ---
+
+// Eliminamos el argumento o usamos _ para indicar desuso
+export const parseDictionaryCsv = (): Promise<{ products: ProductDictionaryItem[], sizes: unknown[] }> => {
+  return new Promise((resolve) => {
+    Logger.log("⚠️ Parseo diccionario pendiente de refactor.");
+    resolve({ products: [], sizes: [] });
+  });
 };

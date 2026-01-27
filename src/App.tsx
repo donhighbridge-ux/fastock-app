@@ -1,17 +1,19 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { collection, onSnapshot, getDocs, writeBatch, doc, deleteDoc, getDoc } from 'firebase/firestore';
+import { collection, onSnapshot, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from './firebase-config';
 import { CartProvider, useCart } from './context/CartContext';
 import FileUpload from './components/FileUpload';
-import ProductSearch from './components/ProductSearch';
 import DashboardFilters from './components/Dashboard/DashboardFilters';
 import StockTable from './components/StockTable';
 import RequestCartView from './components/RequestCartView';
-import TrackingListView from './components/TrackingListView';
+import { TrackingListView } from './components/TrackingListView';
 import StockHealthFilters from './components/Dashboard/StockHealthFilters';
 import type { NormalizedRow } from './types';
 import NotificationBell from './components/NotificationBell';
 import './App.css';
+import { uploadStockBatch } from './services/firebaseStockService';
+import { uploadDictionaryBatch } from './services/dictionaryService';
+import { useStockGrouping } from './hooks/useStockGrouping';
 
 const ORGANIZATION_ID = "demo_org_v1";
 const ALL_STORES_OPTION = "Todas las Tiendas";
@@ -301,61 +303,45 @@ function App() {
     }
   };
 
+ // =========================================================================
+  // LOGIC REPLACEMENT: Módulo de Carga Blindado
+  // =========================================================================
   const handleFileUpload = async (normalizedData: NormalizedRow[], type: string) => {
     setIsLoading(true);
     try {
-      const collectionName = type === 'stock' ? 'stock' : 'product_dictionary';
-      const collectionRef = collection(db, "organizations", ORGANIZATION_ID, collectionName);
-      
-      // Batch de velocidad optimizada (500 ops)
-      const BATCH_SIZE = 500; 
-      
-      // 1. LIMPIEZA
-      console.log("🧹 Iniciando limpieza rápida...");
-      const snapshot = await getDocs(collectionRef);
-      const docsToDelete = snapshot.docs;
-      
-      for (let i = 0; i < docsToDelete.length; i += BATCH_SIZE) {
-        const batch = writeBatch(db);
-        const chunk = docsToDelete.slice(i, i + BATCH_SIZE);
-        chunk.forEach(doc => batch.delete(doc.ref));
-        await batch.commit();
-      }
-
-      // 2. CARGA
-      console.log(`🚀 Iniciando carga de ${normalizedData.length} registros...`);
-      let totalUploaded = 0;
-
-      for (let i = 0; i < normalizedData.length; i += BATCH_SIZE) {
-        const batch = writeBatch(db);
-        const chunk = normalizedData.slice(i, i + BATCH_SIZE);
-        chunk.forEach((row) => {
-          const docRef = doc(collectionRef); 
-          batch.set(docRef, row);
-        });
-        await batch.commit();
-        totalUploaded += chunk.length;
-        
-        if (totalUploaded % 5000 === 0) {
-            const porcentaje = Math.round((totalUploaded / normalizedData.length) * 100);
-            console.log(`⏳ ${totalUploaded}/${normalizedData.length} (${porcentaje}%)`);
-        }
-      }
-
-      // 3. ACTUALIZAR ESTADO LOCAL
       if (type === 'stock') {
+        // 1. Delegamos la subida al Servicio Especialista
+        // Esto maneja: limpieza de datos, reintentos y batching.
+        console.log("🚀 Iniciando servicio de carga de Stock...");
+        await uploadStockBatch(normalizedData, ORGANIZATION_ID);
+        
+        // 2. Actualizamos la UI localmente (Optimistic Update)
+        // Para que el usuario vea los datos sin recargar la página
         setData(normalizedData);
-        // NO seteamos filteredData manualmente aquí, el useEffect lo hará al detectar cambio en 'data'
-        checkForTrackingUpdates(normalizedData);
+        
+        // Si tienes la función de tracking, la llamamos aquí
+        if (typeof checkForTrackingUpdates === 'function') {
+           checkForTrackingUpdates(normalizedData);
+        }
+        
+        alert(`✅ Éxito: Inventario actualizado correctamente.`);
+        
+      } else if (type === 'dictionary') {
+        // 1. Delegamos al Servicio de Diccionario
+        console.log("📘 Iniciando servicio de carga de Diccionario...");
+        
+        // NOTA: Asumimos que FileUpload o el Parser ya nos dieron la estructura { products, sizes }
+        // Si normalizedData viene crudo, el servicio dictionaryService debe manejarlo.
+        // Como 'normalizedData' aquí está tipado como NormalizedRow[], usaremos 'any' temporalmente
+        // para pasar la data del diccionario hasta que refactoricemos el componente FileUpload.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await uploadDictionaryBatch(normalizedData as any);
+        
+        alert("✅ Diccionario y Tallas actualizados.");
       }
-      
-      console.log(`✅ CARGA FINALIZADA.`);
-      console.log(`📊 Excel Original: ${normalizedData.length}`);
-      console.log(`☁️ Firebase Subidos: ${totalUploaded}`);
-
     } catch (error) {
-      console.error("❌ Error CRÍTICO al guardar en Firebase:", error);
-      alert("Hubo un error al subir los datos. Revisa la consola.");
+      console.error("🔥 Error crítico en subida:", error);
+      alert("Hubo un error al subir los datos. Revisa la consola para más detalles.");
     } finally {
       setIsLoading(false);
     }
@@ -448,6 +434,18 @@ function App() {
     setSearchTermInput('');
     setSubFilters({ health: 'all', status: 'all' });
   };
+
+  // =========================================================================
+  // 4. PIPELINE DE TRANSFORMACIÓN (Data Cruda -> Data Inteligente)
+  // =========================================================================
+  // Este hook hace la magia: Agrupa por SKU padre, suma stocks y calcula semáforos.
+  const groupedProducts = useStockGrouping(
+    data,                     // Data cruda de Firebase (NormalizedRow)
+    productDictionary,        // Tu diccionario de nombres (estado productDictionary)
+    sizeMap,                  // Tu mapa de tallas (estado sizeMap)
+    currentSearchTerm,        // Lo que el usuario escribe en la barra (string)
+    currentFilters.tienda === ALL_STORES_ID // ¿Estamos viendo todas las tiendas? (true/false)
+  );
 
   if (isLoading) {
     return (
@@ -592,9 +590,11 @@ function App() {
               </h2>
               {/* INYECCIÓN DE CONTEXTO */}
               <TrackingListView 
-                currentData={data} 
-                currentStore={currentFilters.tienda}
+                currentData={groupedProducts} // <--- CORRECCIÓN: Pasamos la data procesada
+                currentStore={currentFilters.tienda || ''} // <--- CORRECCIÓN: Evitamos que pase null
                 sizeMap={sizeMap}
+                onToggleStar={() => {}} // Props temporales necesarios
+                starredSkus={new Set()} // Props temporales necesarios
               />
             </div>
           )}
