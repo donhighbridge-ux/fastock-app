@@ -15,6 +15,31 @@ interface CurrentStoreState {
   start: number;
 }
 
+const sanitizeStoreId = (name: string | null | undefined): string => {
+  // 1. PRIMERA LÍNEA DE DEFENSA: ¿Es algo real?
+  if (!name || typeof name !== 'string' || name.trim() === '') {
+    return 'tienda_desconocida'; // Fallback seguro
+  }
+
+  // 2. LIMPIEZA QUIRÚRGICA
+  const cleaned = name
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '_')        // Espacios -> Guiones bajos
+    .replace(/[^a-z0-9_]/g, ''); // Eliminar todo lo que no sea letra, número o guión
+
+  // 3. ÚLTIMA LÍNEA DE DEFENSA: ¿Quedó algo después de limpiar?
+  return cleaned || 'tienda_sin_nombre';
+};
+
+// Esta función estandariza el nombre visual para el Frontend (Mayúsculas)
+const sanitizeStoreName = (name: string | null | undefined): string => {
+  if (!name || typeof name !== 'string' || name.trim() === '') {
+    return 'TIENDA DESCONOCIDA';
+  }
+  return name.trim().toUpperCase(); 
+};
+
 // --- HELPERS (Limpieza) ---
 
 const cleanNumber = (val: unknown): number => {
@@ -98,12 +123,12 @@ for (let index = 0; index < headerRow0.length; index++) {
             };
 
             storeMap.forEach(store => {
+              const safeId = sanitizeStoreId(store.name);
+              const safeName = sanitizeStoreName(store.name);
               const normalizedRow: NormalizedRow = {
                 ...baseProduct,
-                tiendaId: sanitizeStoreId(store.name),
-                tiendaNombre: store.name && store.name.trim() !== '' 
-          ? store.name.trim() 
-          : 'Tienda Sin Nombre',
+                tiendaId: safeId,
+                tiendaNombre: safeName, 
                 stock: 0, transit: 0, stock_cd: 0, sales2w: 0, ra: 0
               };
 
@@ -144,13 +169,4 @@ export const parseDictionaryCsv = (): Promise<{ products: ProductDictionaryItem[
     Logger.log("⚠️ Parseo diccionario pendiente de refactor.");
     resolve({ products: [], sizes: [] });
   });
-};
-
-const sanitizeStoreId = (name: string): string => {
-  if (!name) return 'unknown_store';
-  return name
-    .toLowerCase()
-    .trim()
-    .replace(/\s+/g, '_')     // Espacios a guiones bajos
-    .replace(/[^a-z0-9_]/g, ''); // Quitar caracteres raros
 };

@@ -2,8 +2,9 @@ import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import * as XLSX from 'xlsx';
 import type { NormalizedRow } from '../types';
+// IMPORT CRÍTICO: Traemos al especialista que acabamos de arreglar
+import { parseAndNormalizeCsv, parseDictionaryCsv } from '../utils/csvParserLogic';
 
-// Definimos los tipos de archivo posibles
 type UploadType = 'stock' | 'dictionary';
 
 interface FileUploadProps {
@@ -14,146 +15,89 @@ interface FileUploadProps {
 export default function FileUpload({ onUpload, organizationId }: FileUploadProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
-  const [uploadType, setUploadType] = useState<UploadType>('stock'); // Por defecto Stock
+  const [uploadType, setUploadType] = useState<UploadType>('stock');
   const [statusMessage, setStatusMessage] = useState('');
-  
-  // Función auxiliar de limpieza
-  const parseNumber = (value: any): number => {
-    if (value === null || value === undefined || value === '') return 0;
-    const str = String(value).replace(/[$,\s]/g, '');
-    const num = Number(str);
-    return isNaN(num) ? 0 : num;
+
+  // -----------------------------------------------------------------------
+  // Lógica de Puente: Excel -> CSV -> ParserLogic
+  // -----------------------------------------------------------------------
+  const processStockFile = async (file: File, binaryStr: string | ArrayBuffer) => {
+    setStatusMessage('Convirtiendo formato Excel...');
+    
+    // 1. Convertir Excel a CSV crudo (Texto)
+    // Usamos XLSX solo como puente para obtener texto plano que nuestro Parser entiende
+    const workbook = XLSX.read(binaryStr, { type: 'binary' });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const csvOutput = XLSX.utils.sheet_to_csv(sheet, { FS: ';' }); // Forzamos punto y coma si es necesario
+
+    // 2. Delegar al Especialista (csvParserLogic.ts)
+    setStatusMessage('Analizando y Blindando datos...');
+    const normalizedData = await parseAndNormalizeCsv(csvOutput);
+
+    return normalizedData;
   };
 
-  const onDrop = useCallback((acceptedFiles: File[]) => {
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
     const file = acceptedFiles[0];
     if (!file) return;
 
-    // 1. UI: Iniciamos estado de carga
     setIsUploading(true);
     setUploadSuccess(false);
     setStatusMessage('Leyendo archivo...');
-    console.log('📂 Archivo detectado:', file.name, `(${(file.size / 1024).toFixed(2)} KB)`);
+    console.log('📂 Archivo recibido:', file.name);
 
     const reader = new FileReader();
 
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
       try {
         const binaryStr = e.target?.result;
-        const workbook = XLSX.read(binaryStr, { type: 'binary' });
-        const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
-        
-        // Convertimos a matriz de datos
-        const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
+        if (!binaryStr) throw new Error("Error de lectura de archivo");
 
-        console.log(`📊 Hoja leída. Total filas crudas: ${jsonData.length}`);
+        let dataToUpload: NormalizedRow[] = [];
 
-        let normalizedData: NormalizedRow[] = [];
-
-        // LÓGICA DE PARSEO SEGÚN TIPO DE ARCHIVO
         if (uploadType === 'stock') {
-          setStatusMessage('Analizando estructura de tiendas...');
-          
-          // Referencias Fijas (Sin Búsquedas)
-          const headerRow = jsonData[0] || [];
-          const attrRow = jsonData[2] || [];
-
-          // Mapeo de Columnas Estáticas (Simple)
-          const getColIndex = (keyword: string) => {
-            return attrRow.findIndex(cell => 
-              cell && String(cell).toLowerCase().trim() === keyword
-            );
-          };
-
-          const idxSku = getColIndex('sku');
-          const idxArea = getColIndex('área');
-          const idxCat = getColIndex('categoría');
-          const idxDesc = getColIndex('descripción');
-          const idxMarca = getColIndex('marca');
-          const idxTalla = getColIndex('talla');
-
-          // 1. Detectar Tiendas
-          const stores: { name: string; startIndex: number; offsets: Record<string, number> }[] = [];
-          
-          for (let i = 0; i < headerRow.length; i++) {
-            const cell = headerRow[i];
-            if (cell && String(cell).trim() !== '') {
-              const storeName = String(cell).trim();
-              const offsets: Record<string, number> = {};
-              
-              // Buscamos en las siguientes 15 columnas
-              const limit = Math.min(i + 15, attrRow.length);
-              
-              for (let j = i; j < limit; j++) {
-                const colName = String(attrRow[j] || '').toLowerCase().trim();
-                
-                if (colName.includes('stock')) offsets['stock'] = j;
-                if (colName.includes('venta') && colName.includes('2w')) offsets['sales2w'] = j;
-                if (colName.includes('tránsito') || colName.includes('transito')) offsets['transit'] = j;
-                if (colName.includes('ra.') || colName === 'ra') offsets['ra'] = j;
-              }
-
-              if (offsets['stock'] !== undefined) {
-                stores.push({ name: storeName, offsets });
-              }
-            }
-          }
-
-          console.log('🏢 Tiendas detectadas:', stores.map(s => s.name));
-
-          // 2. Iterar Filas de Productos (Empiezan en fila 3)
-          for (let r = 3; r < jsonData.length; r++) {
-            const row = jsonData[r];
-            if (!row) continue;
-
-            const skuVal = idxSku !== -1 ? String(row[idxSku]) : 'SKU_DESCONOCIDO';
-            if (!skuVal || skuVal.toLowerCase().includes('total')) continue;
-
-            const baseData = {
-              sku: skuVal,
-              description: idxDesc !== -1 ? String(row[idxDesc]) : '',
-              marca: idxMarca !== -1 ? String(row[idxMarca]) : '',
-              area: idxArea !== -1 ? String(row[idxArea]) : '',
-              categoria: idxCat !== -1 ? String(row[idxCat]) : '',
-              talla: idxTalla !== -1 ? String(row[idxTalla]) : '',
-            };
-
-            stores.forEach(store => {
-              if (store.offsets['stock'] !== undefined) {
-                normalizedData.push({
-                  ...baseData,
-                  tiendaNombre: store.name, // Mapeado a tiendaNombre (antes tienda)
-                  stock: parseNumber(row[store.offsets['stock']]),
-                  sales2w: parseNumber(row[store.offsets['sales2w']]),
-                  transit: parseNumber(row[store.offsets['transit']]),
-                  ra: parseNumber(row[store.offsets['ra']]),
-                  stock_cd: 0 
-                });
-              }
-            });
-          }
-
+           // CAMINO A: STOCK (Usamos el parser blindado)
+           dataToUpload = await processStockFile(file, binaryStr);
+        
         } else {
-          console.log('Modo diccionario seleccionado');
+           // CAMINO B: DICCIONARIO (Por ahora stub, luego conectaremos igual)
+           console.log('📘 Modo Diccionario');
+           // Aquí idealmente también convertiríamos y llamaríamos a parseDictionaryCsv
+           // Por ahora dejamos el stub para no romper la compilación
+           const dictResult = await parseDictionaryCsv(); 
+           // Nota: parseDictionaryCsv retorna { products, sizes }, no NormalizedRow[]
+           // Esto requerirá ajuste futuro, pero para el fix de hoy (Stock), esto basta.
+           dataToUpload = []; 
         }
 
-        console.log(`✅ Procesamiento finalizado. Filas generadas: ${normalizedData.length}`);
-        
-        if (normalizedData.length > 0) {
-           console.log('🔎 Muestra:', normalizedData[0]);
-           setStatusMessage('Subiendo a la base de datos...');
-           onUpload(normalizedData, uploadType);
+        console.log(`✅ Procesamiento Delegado Finalizado. Filas: ${dataToUpload.length}`);
+
+        if (dataToUpload.length > 0) {
+           // AUDITORÍA FINAL ANTES DE SUBIR
+           // Verificamos que el primer elemento tenga tiendaId
+           const sample = dataToUpload[0];
+           console.log('🔎 Muestra Blindada:', {
+             sku: sample.sku,
+             tiendaNombre: sample.tiendaNombre,
+             tiendaId: sample.tiendaId // <--- ESTO ES LO QUE QUEREMOS VER
+           });
+
+           if (!sample.tiendaId || sample.tiendaId === 'undefined') {
+             throw new Error("⛔ ALERTA: El parser devolvió datos sin tiendaId válido.");
+           }
+
+           setStatusMessage('Subiendo a la nube...');
+           onUpload(dataToUpload, uploadType);
            setUploadSuccess(true);
            setStatusMessage('¡Carga completada con éxito!');
-        } else {
-           setStatusMessage('Error: No se encontraron datos válidos.');
-           console.error('El parser no generó ninguna fila.');
+        } else if (uploadType === 'stock') {
+           throw new Error("El parser no devolvió filas válidas.");
         }
 
-      } catch (error) {
-        console.error('❌ Error crítico al procesar:', error);
-        setStatusMessage('Error al procesar el archivo.');
+      } catch (error: any) {
+        console.error('❌ Error crítico en FileUpload:', error);
+        setStatusMessage(`Error: ${error.message || 'Fallo desconocido'}`);
       } finally {
         setIsUploading(false);
       }
@@ -173,55 +117,61 @@ export default function FileUpload({ onUpload, organizationId }: FileUploadProps
 
   return (
     <div className="space-y-6">
+      {/* Selector de Tipo */}
       <div className="flex justify-center space-x-6 mb-4">
-        <label className="flex items-center space-x-2 cursor-pointer">
+        <label className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-2 rounded transition">
           <input 
             type="radio" name="uploadType" value="stock" 
             checked={uploadType === 'stock'} onChange={() => setUploadType('stock')}
             className="form-radio text-blue-600 h-4 w-4"
           />
-          <span className="text-gray-700 font-medium">Carga de Stock (Info WX)</span>
+          <span className={`font-medium ${uploadType === 'stock' ? 'text-blue-700' : 'text-gray-600'}`}>
+            Carga de Stock (Info WX)
+          </span>
         </label>
-        <label className="flex items-center space-x-2 cursor-pointer">
+        <label className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-2 rounded transition">
           <input 
             type="radio" name="uploadType" value="dictionary" 
             checked={uploadType === 'dictionary'} onChange={() => setUploadType('dictionary')}
             className="form-radio text-green-600 h-4 w-4"
           />
-          <span className="text-gray-700 font-medium">Diccionario de Productos</span>
+          <span className={`font-medium ${uploadType === 'dictionary' ? 'text-green-700' : 'text-gray-600'}`}>
+            Diccionario de Productos
+          </span>
         </label>
       </div>
 
+      {/* Zona de Drop */}
       <div 
         {...getRootProps()} 
-        className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer transition-colors
-          ${isDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-blue-400'}
+        className={`border-2 border-dashed rounded-xl p-12 text-center cursor-pointer transition-all duration-200 ease-in-out
+          ${isDragActive ? 'border-blue-500 bg-blue-50 scale-[1.02]' : 'border-gray-300 hover:border-blue-400 hover:bg-gray-50'}
           ${uploadSuccess ? 'bg-green-50 border-green-500' : ''}
+          ${isUploading ? 'pointer-events-none opacity-80' : ''}
         `}
       >
         <input {...getInputProps()} />
         
         {isUploading ? (
           <div className="flex flex-col items-center justify-center py-4">
-             {/* Animación de Doble Anillo con Gradiente */}
              <div className="relative w-16 h-16 mb-4">
                <div className="absolute top-0 left-0 w-full h-full border-4 border-blue-200 rounded-full opacity-25"></div>
                <div className="absolute top-0 left-0 w-full h-full border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
-               {/* Punto central pulsante (estilo "Brain") */}
-               <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
              </div>
-             
              <p className="text-lg font-semibold text-gray-700 animate-pulse">{statusMessage}</p>
-             <p className="text-xs text-gray-400 mt-2">No cierres esta pestaña</p>
           </div>
         ) : uploadSuccess ? (
-          <div className="flex flex-col items-center">
-            <div className="h-12 w-12 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-3 text-2xl">✓</div>
-            <p className="text-green-800 font-bold">¡Carga Exitosa!</p>
+          <div className="flex flex-col items-center animate-fade-in">
+            <div className="h-16 w-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mb-3 text-3xl shadow-sm">✓</div>
+            <p className="text-green-800 font-bold text-lg">¡Listo!</p>
+            <p className="text-green-600 text-sm mt-1">Archivo procesado correctamente</p>
           </div>
         ) : (
-          <div>
-            <p className="text-xl text-gray-600 mb-2">Arrastra tu archivo Excel / CSV aquí</p>
+          <div className="group">
+            <div className="mb-4 transform group-hover:-translate-y-1 transition-transform duration-300">
+               <span className="text-4xl">📄</span>
+            </div>
+            <p className="text-xl text-gray-600 mb-2 font-medium">Arrastra tu archivo aquí</p>
             <p className="text-sm text-gray-400">Soporta .xlsx, .xls y .csv</p>
           </div>
         )}
