@@ -100,8 +100,10 @@ for (let index = 0; index < headerRow0.length; index++) {
             storeMap.forEach(store => {
               const normalizedRow: NormalizedRow = {
                 ...baseProduct,
-                tiendaId: store.name.replace(/[^a-z0-9]/g, '_'),
-                tiendaNombre: store.name.toUpperCase(),
+                tiendaId: sanitizeStoreId(store.name),
+                tiendaNombre: store.name && store.name.trim() !== '' 
+          ? store.name.trim() 
+          : 'Tienda Sin Nombre',
                 stock: 0, transit: 0, stock_cd: 0, sales2w: 0, ra: 0
               };
 
@@ -142,4 +144,13 @@ export const parseDictionaryCsv = (): Promise<{ products: ProductDictionaryItem[
     Logger.log("⚠️ Parseo diccionario pendiente de refactor.");
     resolve({ products: [], sizes: [] });
   });
+};
+
+const sanitizeStoreId = (name: string): string => {
+  if (!name) return 'unknown_store';
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '_')     // Espacios a guiones bajos
+    .replace(/[^a-z0-9_]/g, ''); // Quitar caracteres raros
 };
