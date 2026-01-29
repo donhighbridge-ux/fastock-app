@@ -1,38 +1,35 @@
-import React, { useCallback, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import * as XLSX from 'xlsx';
 import type { NormalizedRow } from '../types';
-// IMPORT CRÍTICO: Traemos al especialista que acabamos de arreglar
 import { parseAndNormalizeCsv, parseDictionaryCsv } from '../utils/csvParserLogic';
 
 type UploadType = 'stock' | 'dictionary';
 
 interface FileUploadProps {
   onUpload: (data: NormalizedRow[], type: UploadType) => void;
-  organizationId: string;
+  // Eliminado organizationId porque no se usa aquí
 }
 
-export default function FileUpload({ onUpload, organizationId }: FileUploadProps) {
+export default function FileUpload({ onUpload }: FileUploadProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [uploadType, setUploadType] = useState<UploadType>('stock');
   const [statusMessage, setStatusMessage] = useState('');
 
-  // -----------------------------------------------------------------------
-  // Lógica de Puente: Excel -> CSV -> ParserLogic
-  // -----------------------------------------------------------------------
-  const processStockFile = async (file: File, binaryStr: string | ArrayBuffer) => {
+  // 1. Lógica de Puente: Excel -> CSV -> ParserLogic
+  // Eliminado el argumento 'file' porque era redundante. Solo necesitamos el contenido binario.
+  const processStockFile = async (binaryStr: string | ArrayBuffer) => {
     setStatusMessage('Convirtiendo formato Excel...');
     
-    // 1. Convertir Excel a CSV crudo (Texto)
-    // Usamos XLSX solo como puente para obtener texto plano que nuestro Parser entiende
     const workbook = XLSX.read(binaryStr, { type: 'binary' });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
-    const csvOutput = XLSX.utils.sheet_to_csv(sheet, { FS: ';' }); // Forzamos punto y coma si es necesario
+    // Forzamos CSV con punto y coma para estandarizar la entrada al parser
+    const csvOutput = XLSX.utils.sheet_to_csv(sheet, { FS: ';' }); 
 
-    // 2. Delegar al Especialista (csvParserLogic.ts)
     setStatusMessage('Analizando y Blindando datos...');
+    // Delegamos al especialista (csvParserLogic)
     const normalizedData = await parseAndNormalizeCsv(csvOutput);
 
     return normalizedData;
@@ -57,17 +54,16 @@ export default function FileUpload({ onUpload, organizationId }: FileUploadProps
         let dataToUpload: NormalizedRow[] = [];
 
         if (uploadType === 'stock') {
-           // CAMINO A: STOCK (Usamos el parser blindado)
-           dataToUpload = await processStockFile(file, binaryStr);
+           // CAMINO A: STOCK
+           dataToUpload = await processStockFile(binaryStr);
         
         } else {
-           // CAMINO B: DICCIONARIO (Por ahora stub, luego conectaremos igual)
+           // CAMINO B: DICCIONARIO
            console.log('📘 Modo Diccionario');
-           // Aquí idealmente también convertiríamos y llamaríamos a parseDictionaryCsv
-           // Por ahora dejamos el stub para no romper la compilación
-           const dictResult = await parseDictionaryCsv(); 
-           // Nota: parseDictionaryCsv retorna { products, sizes }, no NormalizedRow[]
-           // Esto requerirá ajuste futuro, pero para el fix de hoy (Stock), esto basta.
+           // Llamamos a la función sin asignar variable inútil.
+           await parseDictionaryCsv(); 
+           
+           // Stub para mantener compatibilidad hasta implementar lógica real de diccionario
            dataToUpload = []; 
         }
 
@@ -75,14 +71,13 @@ export default function FileUpload({ onUpload, organizationId }: FileUploadProps
 
         if (dataToUpload.length > 0) {
            // AUDITORÍA FINAL ANTES DE SUBIR
-           // Verificamos que el primer elemento tenga tiendaId
            const sample = dataToUpload[0];
            console.log('🔎 Muestra Blindada:', {
              sku: sample.sku,
-             tiendaNombre: sample.tiendaNombre,
-             tiendaId: sample.tiendaId // <--- ESTO ES LO QUE QUEREMOS VER
+             tiendaId: sample.tiendaId // <--- CONFIRMACIÓN VISUAL
            });
 
+           // Validación de seguridad
            if (!sample.tiendaId || sample.tiendaId === 'undefined') {
              throw new Error("⛔ ALERTA: El parser devolvió datos sin tiendaId válido.");
            }
@@ -95,9 +90,18 @@ export default function FileUpload({ onUpload, organizationId }: FileUploadProps
            throw new Error("El parser no devolvió filas válidas.");
         }
 
-      } catch (error: any) {
+      } catch (error: unknown) {
+        // MANEJO DE ERRORES ROBUSTO (Sin 'any')
         console.error('❌ Error crítico en FileUpload:', error);
-        setStatusMessage(`Error: ${error.message || 'Fallo desconocido'}`);
+        
+        let errorMessage = 'Fallo desconocido al procesar archivo';
+        if (error instanceof Error) {
+          errorMessage = error.message;
+        } else if (typeof error === 'string') {
+          errorMessage = error;
+        }
+
+        setStatusMessage(`Error: ${errorMessage}`);
       } finally {
         setIsUploading(false);
       }

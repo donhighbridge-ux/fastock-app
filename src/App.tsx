@@ -555,7 +555,7 @@ function App() {
                 <p className="text-gray-500">Subir y normalizar archivo de stock</p>
               </div>
               <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
-                <FileUpload onUpload={handleFileUpload} organizationId={ORGANIZATION_ID} />
+                <FileUpload onUpload={handleFileUpload} />
               </div>
             </div>
           )}
