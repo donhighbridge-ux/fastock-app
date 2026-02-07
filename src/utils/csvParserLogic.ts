@@ -1,19 +1,32 @@
 import Papa from 'papaparse';
 import Logger from './logger'; 
 import type { NormalizedRow, ProductDictionaryItem } from '../types';
-import { METRIC_MAPPINGS, STORE_BLACKLIST } from './csvConfig';
+import { METRIC_MAPPINGS, STATIC_COLUMNS,} from './csvConfig';
 
-// Definimos interfaces locales aquí para asegurar que TS las vea
-interface StoreRange { 
-  name: string; 
-  startIndex: number; 
-  endIndex: number; 
-}
+// ==========================================
+// 🛠️ HELPERS (Limpieza de Datos)
+// ==========================================
 
-interface CurrentStoreState {
-  name: string;
-  start: number;
-}
+// Mantiene la lógica para Stock CD (que sigue siendo numérico estricto)
+const cleanNumber = (val: unknown): number => {
+  if (typeof val === 'number') return val;
+  if (!val) return 0;
+  if (typeof val === 'string') {
+    const cleaned = val.replace(/[^0-9.-]/g, ''); 
+    const num = parseFloat(cleaned);
+    return isNaN(num) ? 0 : num;
+  }
+  return 0;
+};
+
+// NUEVO: Maneja la lógica "VibeCoded" para métricas variables
+// Si es null/vacío -> 'N/A'. Si tiene dato -> Número.
+const cleanMetricValue = (val: unknown): number | string => {
+  if (val === null || val === undefined || val === '') return 'N/A';
+  if (typeof val === 'string' && val.trim() === '') return 'N/A';
+  
+  return cleanNumber(val);
+};
 
 const sanitizeStoreId = (name: string | null | undefined): string => {
   // 1. PRIMERA LÍNEA DE DEFENSA: ¿Es algo real?
@@ -40,120 +53,161 @@ const sanitizeStoreName = (name: string | null | undefined): string => {
   return name.trim().toUpperCase(); 
 };
 
-// --- HELPERS (Limpieza) ---
-
-const cleanNumber = (val: unknown): number => {
-  if (typeof val === 'number') return val;
-  if (typeof val === 'string') {
-    const cleaned = val.replace(/[^0-9.-]/g, ''); 
-    const num = parseFloat(cleaned);
-    return isNaN(num) ? 0 : num;
-  }
-  return 0;
-};
-
-const normalizeStr = (str: string): string => 
-  (str || '').toLowerCase().trim().replace(/_/g, ' ');
-
 // --- PARSER PRINCIPAL ---
 
 export const parseAndNormalizeCsv = (csvText: string): Promise<NormalizedRow[]> => {
   return new Promise((resolve, reject) => {
     Papa.parse(csvText, {
       header: false,
-      skipEmptyLines: true,
+      skipEmptyLines: 'greedy',
       complete: (results) => {
         try {
           const rawData = results.data as string[][];
-          if (!rawData || rawData.length < 3) throw new Error("Archivo CSV estructura inválida.");
-
-          Logger.log("Iniciando análisis estructural...");
-
-          // 1. Detección de Cabeceras
-          const headerRow0 = rawData[0].map(normalizeStr);
-          const headerRow1 = rawData[1].map(normalizeStr);
-
-          // 2. Mapeo de Tiendas (Tipado Estricto para evitar 'never')
-          const storeMap: StoreRange[] = []; // <--- TIPADO EXPLÍCITO AQUÍ ES CRÍTICO
-          let currentStore: CurrentStoreState | null = null; // <--- TIPADO EXPLÍCITO AQUÍ
-
-          // En lugar de .forEach, usamos for clásico.
-// Esto mantiene el contexto y hace feliz al compilador paranoico.
-
-for (let index = 0; index < headerRow0.length; index++) {
-  const cell = headerRow0[index];
-  const isPotentialStore = cell && cell.length > 2 && !STORE_BLACKLIST.some(b => cell.includes(b));
-
-  if (isPotentialStore) {
-    if (currentStore) {
-      storeMap.push({ 
-        name: currentStore.name, 
-        startIndex: currentStore.start, 
-        endIndex: index - 1 
-      });
-    }
-    // TypeScript confía en esto porque no hay cambio de función
-    currentStore = { name: cell, start: index };
-  }
-}
           
-          // Cerrar la última
-          if (currentStore) {
-             storeMap.push({ 
-               name: currentStore.name, 
-               startIndex: currentStore.start, 
-               endIndex: headerRow0.length - 1 
-             });
+          // VALIDACIÓN DE ESTRUCTURA MÍNIMA (5 Filas)
+          // Fila 0: Tiendas | Fila 1: Códigos | Fila 2: Headers | Fila 3: Relleno | Fila 4: Datos
+          if (!rawData || rawData.length < 5) {
+            throw new Error("El archivo no cumple con la estructura mínima requerida (5 filas de contexto).");
           }
 
-          if (storeMap.length === 0) throw new Error("No se detectaron tiendas.");
+          Logger.log(`📊 Iniciando análisis VibeCoded. Filas totales: ${rawData.length}`);
 
-          // 3. Extracción
-          const normalizedData: NormalizedRow[] = [];
+          // --- FASE 1: MAPEO DEL TERRITORIO (Filas 0, 1 y 2) ---
           
-          for (let i = 2; i < rawData.length; i++) {
-            const row = rawData[i];
-            const sku = row[0]?.trim();
-            if (!sku) continue; 
+          const rowTiendas = rawData[0]; // Fila 1 Excel (Index 0)
+          const rowCodigos = rawData[1]; // Fila 2 Excel (Index 1)
+          const rowHeaders = rawData[2]; // Fila 3 Excel (Index 2) - Headers Reales
 
-            const baseProduct = {
-              sku: sku,
-              description: row[1]?.trim() || 'Sin Descripción',
-              marca: '', categoria: '', area: '' 
-            };
+          // A. Detectar Bloques de Tiendas (Barrido Horizontal en Fila 0)
+          const stores: { name: string; code: string; start: number; end: number }[] = [];
+          let currentStoreStart = -1;
+          let currentStoreName = "";
 
-            storeMap.forEach(store => {
-              const safeId = sanitizeStoreId(store.name);
-              const safeName = sanitizeStoreName(store.name);
-              const normalizedRow: NormalizedRow = {
-                ...baseProduct,
-                tiendaId: safeId,
-                tiendaNombre: safeName, 
-                stock: 0, transit: 0, stock_cd: 0, sales2w: 0, ra: 0
-              };
-
-              let hasData = false;
-
-              METRIC_MAPPINGS.forEach(mapping => {
-                for (let col = store.startIndex; col <= store.endIndex; col++) {
-                   const headerName = headerRow1[col];
-                   if (mapping.aliases.some(alias => headerName.includes(alias))) {
-                     const val = cleanNumber(row[col]);
-                     normalizedRow[mapping.targetField] = val;
-                     if (val !== 0) hasData = true;
-                     break; 
-                   }
-                }
-              });
-
-              if (hasData) normalizedData.push(normalizedRow);
+          for (let i = 0; i < rowTiendas.length; i++) {
+            const cell = rowTiendas[i]?.trim();
+            
+            // Si hay texto y es largo -> Nueva Tienda
+            if (cell && cell.length > 2) {
+              // Cerrar tienda anterior si existe
+              if (currentStoreStart !== -1) {
+                stores.push({ 
+                  name: currentStoreName, 
+                  // Capturamos el código de tienda de la Fila 1
+                  code: rowCodigos[currentStoreStart]?.trim() || 'S/C',
+                  start: currentStoreStart, 
+                  end: i - 1 
+                });
+              }
+              // Abrir nueva tienda
+              currentStoreStart = i;
+              currentStoreName = cell;
+            }
+          }
+          // Cerrar la última tienda pendiente
+          if (currentStoreStart !== -1) {
+            stores.push({ 
+              name: currentStoreName, 
+              code: rowCodigos[currentStoreStart]?.trim() || 'S/C',
+              start: currentStoreStart, 
+              end: rowTiendas.length - 1 
             });
           }
 
+          if (stores.length === 0) throw new Error("No se detectaron tiendas en la Fila 1.");
+          Logger.log(`🏢 Tiendas detectadas: ${stores.length}`);
+
+          // B. Buscar Índices de Columnas Globales (Barrido Horizontal en Fila 2)
+          // Buscamos dónde están SKU, Descripción, Stock CD, etc.
+          const findIndex = (aliases: string[]) => rowHeaders.findIndex(cell => 
+            cell && aliases.some(alias => cell.trim().toLowerCase() === alias.toLowerCase())
+          );
+
+          const idxSku = findIndex(STATIC_COLUMNS.sku);
+          const idxDesc = findIndex(STATIC_COLUMNS.description);
+          const idxStockCD = findIndex(STATIC_COLUMNS.stock_cd); // Global
+          
+          // Propiedades Constantes
+          const idxArea = findIndex(STATIC_COLUMNS.area);
+          const idxCategoria = findIndex(STATIC_COLUMNS.categoria);
+          const idxMarca = findIndex(STATIC_COLUMNS.marca); // Usamos Temporada/Marca
+
+          if (idxSku === -1) throw new Error("⛔ Estructura Inválida: No se encontró la columna 'SKU' en la Fila 3.");
+
+          // --- FASE 2: EXTRACCIÓN DE DATOS (Fila 4 en adelante) ---
+
+          const normalizedData: NormalizedRow[] = [];
+          const startRowIndex = 4; // Fila 5 del Excel (Index 4) - Saltamos la Fila 3 (Relleno)
+
+          for (let i = startRowIndex; i < rawData.length; i++) {
+            const row = rawData[i];
+            const skuVal = row[idxSku];
+            if (!skuVal) continue; // Validación mínima de existencia
+
+            const sku = skuVal.trim();
+
+            // Validación: Si no hay SKU, la fila no sirve
+            if (sku.split('_').length !== 3) continue;
+
+            const description = idxDesc !== -1 ? row[idxDesc] : 'Sin Descripción';
+            // Extracción Global: Stock CD se toma una vez por fila
+            const stockCd = idxStockCD !== -1 ? cleanNumber(row[idxStockCD]) : 0;
+            
+            // Extracción de Constantes 
+            const area = idxArea !== -1 ? row[idxArea]?.trim() : 'General';
+            const categoria = idxCategoria !== -1 ? row[idxCategoria]?.trim() : 'General';
+            const marca = idxMarca !== -1 ? row[idxMarca]?.trim() : 'General'; // Mapeo de Temporada
+
+            // Generación de Filas Atómicas (Una por Tienda)
+            stores.forEach(store => {
+              const safeId = sanitizeStoreId(store.name);
+              const safeName = sanitizeStoreName(store.name);
+
+              const normalizedRow: NormalizedRow = {
+                sku: sku,
+                description: description,
+                tiendaId: safeId,
+                tiendaNombre: safeName,
+                
+                // Propiedades Constantes 
+                marca: marca,
+                categoria: categoria,
+                area: area,
+
+                // Valores iniciales variables en 0
+                stock: 0, 
+                transit: 0, 
+                sales2w: 0, 
+                ra: 0, 
+                
+                // Asignamos el dato global
+                stock_cd: stockCd 
+              };
+
+              // Extracción Local: Buscamos métricas DENTRO del rango de columnas de esta tienda
+              METRIC_MAPPINGS.forEach(mapping => {
+                // Solo buscamos entre start y end de ESTA tienda
+                for (let col = store.start; col <= store.end; col++) {
+                  const headerName = rowHeaders[col];
+                  if (headerName && mapping.aliases.some(alias => headerName.trim() === alias)) {
+                    // Mapeo seguro usando csvConfig
+                    const val = cleanMetricValue(row[col]);
+                    // TypeScript safe casting
+                    (normalizedRow as unknown as Record<string, string | number>)[mapping.targetField] = val;
+                    break; // Dato encontrado, pasar a la siguiente métrica
+                  }
+                }
+              });
+
+              normalizedData.push(normalizedRow);
+            });
+          }
+
+          Logger.log(`✅ Parser finalizado. ${normalizedData.length} registros generados.`);
           resolve(normalizedData);
+
         } catch (error: unknown) {
-          const msg = error instanceof Error ? error.message : "Error desconocido";
-          Logger.error("Parser Error:", msg);
+          const msg = error instanceof Error ? error.message : "Error desconocido durante el parsing";
+          Logger.error("Error Parser:", msg);
           reject(new Error(msg));
         }
       }

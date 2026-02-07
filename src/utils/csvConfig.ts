@@ -1,45 +1,57 @@
 /**
- * src/utils/csvConfig.ts
- * LA INTELIGENCIA DE TRADUCCIÓN.
  * Configura qué buscar en el Excel y a qué propiedad de NormalizedRow corresponde.
  */
 
 import type { NormalizedRow } from '../types';
 
-// Definimos un tipo para las claves numéricas permitidas
-export type MetricKey = keyof Pick<NormalizedRow, 'stock' | 'transit' | 'stock_cd' | 'sales2w' | 'ra'>;
+// ==========================================
+// 1. DEFINICIONES DE TIPOS (Blindaje)
+// ==========================================
 
-interface MetricConfig {
-  targetField: MetricKey; // El nombre en nuestra DB (La Ley)
-  aliases: string[];      // Los nombres posibles en el Excel (El Caos)
+// Interfaz para asegurar que solo buscamos campos que existen en el tipo de dato
+interface MetricMappingDef {
+  id: string;
+  aliases: string[];
+  targetField: keyof NormalizedRow; 
 }
 
-// Aquí está la magia. Si el Excel trae "En Viaje", nosotros entendemos "transit".
-export const METRIC_MAPPINGS: MetricConfig[] = [
-  { 
-    targetField: 'stock', 
-    aliases: ['stock tienda', 'stock local', 'inv. final', 'on hand'] 
-  },
-  { 
-    targetField: 'transit', 
-    aliases: ['transito', 'tránsito', 'en transito', 'en viaje', 'in transit'] 
-  },
-  { 
-    targetField: 'stock_cd', 
-    aliases: ['stock cd', 'bodega central', 'cd disponible', 'stock_cd'] 
-  },
-  { 
-    targetField: 'sales2w', 
-    aliases: ['venta 2w', 'venta 2 semanas', 'sales last 2w'] 
-  },
-  { 
-    targetField: 'ra', 
-    aliases: ['ra', 'reposicion automatica', 'target stock'] 
-  }
-];
+// ==========================================
+// 2. COLUMNAS GLOBALES (Fila 3 / Index 2)
+// ==========================================
+// Estas columnas aparecen UNA sola vez por fila de producto.
+// Mapeo: Propiedad en NormalizedRow -> Lista de posibles encabezados en Excel
+export const STATIC_COLUMNS: Record<string, string[]> = {
+  sku: ['SKU'], 
+  marca: ['Marca'],
+  area: ['Área', 'Area'],
+  categoria: ['Categoría', 'Categoria'],
+  description: ['Descripción', 'Descripcion'], 
+  stock_cd: ['Stock CD'], // Global según VibeCoded 
+};
 
-// Lista negra de "Falsas Tiendas" (Columnas que parecen tiendas pero no lo son)
-export const STORE_BLACKLIST = [
-  'total', 'total general', 'suma', 'promedio', 'diferencia', 
-  'stock', 'transito', 'sku', 'descripcion', 'estilo', 'color'
+// ==========================================
+// 3. COLUMNAS LOCALES (Repetidas por Tienda)
+// ==========================================
+// Estas columnas se buscan DENTRO del rango de columnas de cada tienda.
+export const METRIC_MAPPINGS: MetricMappingDef[] = [
+  { 
+    id: 'stock', 
+    aliases: ['Stock tienda'], // Literal exacto
+    targetField: 'stock' 
+  },
+  { 
+    id: 'transit', 
+    aliases: ['Tránsito'], // Literal exacto
+    targetField: 'transit' 
+  },
+  { 
+    id: 'sales', 
+    aliases: ['Venta 2W'], // Literal exacto 
+    targetField: 'sales2w' 
+  },
+  { 
+    id: 'ra', 
+    aliases: ['RA.'], // Literal exacto con punto opcional
+    targetField: 'ra' 
+  }
 ];
