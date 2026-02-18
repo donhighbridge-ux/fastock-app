@@ -1,16 +1,15 @@
 import { useMemo } from 'react';
-import type { NormalizedRow, StockHealth, StockStatus, GroupedProduct } from '../types'; // <--- Importa GroupedProduct
-import { getCleanSize } from '../utils/stockUtils';
+import type { NormalizedRow, StockHealth, StockStatus, GroupedProduct } from '../types';
 
-// Cambia el tipo de retorno explícitamente a GroupedProduct[]
 export const useStockGrouping = (
   data: NormalizedRow[], 
-  productDictionary: Record<string, string>, 
-  sizeMap: Record<string, string>,
+  productDictionary: Record<string, string>,
   searchTerm: string = '',
   isMultiStore: boolean = false
-): GroupedProduct[] => { // <--- TIPADO ESTRICTO DE SALIDA
+): GroupedProduct[] => {
+  
   const groupedData = useMemo(() => {
+    // 📦 ESTRUCTURA DEL ACUMULADOR (Limpia)
     const groups: Record<string, {
       baseSku: string;
       name: string;
@@ -21,115 +20,102 @@ export const useStockGrouping = (
       stock_cd: number;
       isDictionary: boolean;
       originalSku: string;
+      
+      // 🚦 VARIABLES DE CONTROL (Solo Banderas)
       hasZero: boolean;
       hasOne: boolean;
-      comingSizes: string[];
-      requestSizes: string[];
-      deadSizes: string[];
+      
       storeName?: string;
+      // 🏷️ Metadata
+      area: string;
+      categoria: string;
+      marca: string;
     }> = {};
 
     data.forEach((item) => {
-      // 1. Identificación de Grupo
+      // 1. Identificación
       const parts = item.sku.split('_');
       const baseSku = parts.length >= 2 ? parts.slice(0, 2).join('_').toLowerCase() : item.sku.toLowerCase();
 
       let groupKey = baseSku;
-      let storeName: string | undefined = undefined;
-
       if (searchTerm && isMultiStore) {
           groupKey = `${baseSku}_${item.tiendaNombre}`;
-          storeName = item.tiendaNombre;
       }
 
-      // 2. Inicialización (Si no existe el grupo)
+      // 2. Inicialización
       if (!groups[groupKey]) {
-        const dictionaryName = productDictionary[baseSku];
         groups[groupKey] = {
-          baseSku,
-          originalSku: item.sku,
-          name: dictionaryName || item.description || "Sin Nombre",
+          baseSku: baseSku,
+          name: productDictionary[baseSku] || item.description,
           stock: 0,
           transit: 0,
           sales2w: 0,
           ra: 0,
-          stock_cd: 0,
-          isDictionary: !!dictionaryName,
-          hasZero: false,
+          stock_cd: Number(item.stock_cd) || 0,
+          isDictionary: !!productDictionary[baseSku],
+          originalSku: item.sku,
+          hasZero: false, 
           hasOne: false,
-          comingSizes: [],
-          requestSizes: [],
-          deadSizes: [],
-          storeName,
+          storeName: isMultiStore ? item.tiendaNombre : undefined,
+          area: item.area || 'General',
+          categoria: item.categoria || 'General',
+          marca: item.marca || 'General'
         };
       }
 
-      // 3. AGREGACIÓN TIPADA (Estilo Palantir)
-      // Gracias a types.ts estricto y el parser robusto, confiamos ciegamente en la data.
-      // Ya no hay "as any", ni "?? 0", ni conversiones dudosas.
-      
-      const group = groups[groupKey]; // Referencia local para limpieza visual
+      // 3. Sanitización
+      const safeStock = item.stock === 'N/A' ? 0 : Number(item.stock) || 0;
+      const safeTransit = item.transit === 'N/A' ? 0 : Number(item.transit) || 0;
+      const safeSales = item.sales2w === 'N/A' ? 0 : Number(item.sales2w) || 0;
+      const safeRa = item.ra === 'N/A' ? 0 : Number(item.ra) || 0;
 
-      group.stock += item.stock;
-      group.transit += item.transit;
-      group.stock_cd += item.stock_cd;
-      group.sales2w += item.sales2w;
-      group.ra += item.ra;
+      const group = groups[groupKey];
 
-      // 4. Lógica de Negocio (Semáforo)
-      if (item.stock <= 1) {
-        if (item.stock === 0) group.hasZero = true;
-        if (item.stock === 1) group.hasOne = true;
+      // 4. Agregación
+      group.stock += safeStock;
+      group.transit += safeTransit;
+      group.sales2w += safeSales;
+      group.ra += safeRa;
 
-        const sizeName = getCleanSize(item.sku, sizeMap);
-        
-        // Jerarquía de Decisión
-        if (item.transit > 0) {
-          group.comingSizes.push(sizeName);
-        } else if (item.stock_cd > 0) {
-          group.requestSizes.push(sizeName);
-        } else {
-          group.deadSizes.push(sizeName);
-        }
+      // 5. Diagnóstico Rápido (Solo Banderas)
+      if (safeStock === 0) {
+        group.hasZero = true; 
+      } else if (safeStock === 1) {
+        group.hasOne = true;
       }
     });
 
-    // 5. Transformación a Array y Estado Final
+    // 6. Transformación Final
     let result = Object.values(groups).map(group => {
-      let status: StockStatus = 'STOCK OK';
+      let status: StockStatus = 'COMPLETO'; 
       let emoji = '🟢';
 
-      if (group.comingSizes.length > 0) {
-        status = 'EN TRÁNSITO';
-        emoji = '🟠';
-      } else if (group.requestSizes.length > 0) {
-        status = 'PIDE SOLO...';
-        emoji = '🟡';
-      } else if (group.deadSizes.length > 0) {
-        status = 'NADA EN EL CD';
+      // Jerarquía de Estado
+      if (group.hasZero) {
+        status = 'INCOMPLETO';
         emoji = '🔴';
+      } else if (group.hasOne) {
+        status = 'QUEDA POCO';
+        emoji = '🟡';
       }
 
+      // Objeto Health Ligero
       const health: StockHealth = {
         status,
-        emoji,
-        details: {
-          coming: group.comingSizes,
-          request: group.requestSizes,
-          dead: group.deadSizes
-        }
+        emoji
+        // Sin 'details'
       };
 
       return { ...group, health };
     });
 
-    // Filtro de limpieza para vista multi-tienda
+    // Filtro Opcional Multi-tienda
     if (searchTerm && isMultiStore) {
         result = result.filter((group) => group.stock > 0 || group.transit > 0);
     }
 
-    return result as GroupedProduct[]; // Cast final seguro porque construimos el objeto correctamente
-  }, [data, productDictionary, sizeMap, searchTerm, isMultiStore]);
+    return result as GroupedProduct[];
+  }, [data, productDictionary, searchTerm, isMultiStore]);
 
   return groupedData;
 };

@@ -18,11 +18,11 @@ export interface NormalizedRow {
 
   // Métricas de Negocio (El Núcleo Numérico)
   // Todo debe ser numérico. Nada de strings, nada de nulls.
-  stock: number;      // Stock Físico en Tienda
-  transit: number;    // Stock en Tránsito hacia la tienda
-  stock_cd: number;   // Stock Disponible en Bodega Central
-  sales2w: number;    // Velocidad de venta (2 semanas)
-  ra: number;         // Reposición Automática (Target)
+  stock: number | string;      // Stock Físico en Tienda
+  transit: number | string;    // Stock en Tránsito hacia la tienda
+  stock_cd: number | string;   // Stock Disponible en Bodega Central
+  sales2w: number | string;    // Velocidad de venta (2 semanas)
+  ra: number | string;         // Reposición Automática (Target)
 }
 
 // Nota: Eliminamos ProductDictionaryItem de aquí si no se usa en la lógica crítica, 
@@ -40,17 +40,12 @@ export interface ProductDictionaryItem {
 // Estos tipos no existen en la base de datos. 
 // Son estructuras calculadas en memoria para el semáforo del Frontend.
 
-export type StockStatus = 'STOCK OK' | 'EN TRÁNSITO' | 'PIDE SOLO...' | 'NADA EN EL CD';
+export type StockStatus = 'COMPLETO' | 'QUEDA POCO' | 'INCOMPLETO';
 
 export interface StockHealth {
   status: StockStatus;
   emoji: string;
-  details: {
-    coming: string[];  // Tallas que vienen viajando
-    request: string[]; // Tallas que se pueden pedir al CD
-    dead: string[];    // Tallas muertas (sin stock ni reposición)
   };
-}
 
 // ==========================================
 // 4. CAPA DE NEGOCIO (AGREGADOS)
@@ -61,23 +56,24 @@ export interface StockHealth {
 export interface GroupedProduct {
   baseSku: string;
   name: string;
-  originalSku: string;
-  
-  // Métricas Agregadas
   stock: number;
   transit: number;
-  stock_cd: number;
   sales2w: number;
   ra: number;
-  
-  // Diagnóstico
-  health: StockHealth; // <--- AQUÍ ESTÁ LA MAGIA. Tipado estricto.
+  stock_cd: number;
+  isDictionary: boolean;
+  originalSku: string;
+  storeName?: string;
 
-  // UI Helpers
-  comingSizes: string[];
-  requestSizes: string[];
-  deadSizes: string[];
+  // ✅ AGREGAR: Los nuevos sensores del semáforo
   hasZero: boolean;
   hasOne: boolean;
-  storeName?: string;
+
+  // ✅ AGREGAR: La metadata para que funcionen los FILTROS
+  area: string;
+  categoria: string;
+  marca: string;
+
+  health: StockHealth;
+
 }
