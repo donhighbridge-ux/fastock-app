@@ -1,8 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import type { NormalizedRow, StockHealth } from '../types';
 import { useCart } from '../context/CartContext';
-import { getCleanSize } from '../utils/stockUtils'; // Asegúrate de tener esto o usa un helper local
 
 interface StockDetailModalProps {
   isOpen: boolean;
@@ -13,6 +12,8 @@ interface StockDetailModalProps {
   currentStoreName?: string;
 }
 
+const getTimestamp = () => Date.now();
+
 const StockDetailModal: React.FC<StockDetailModalProps> = ({ 
   isOpen, 
   onClose, 
@@ -21,18 +22,15 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
   sizeMap, 
   currentStoreName 
 }) => {
-  const { addToRequest, addToTracking, trackingList } = useCart();
   
-  // Estado para feedback visual rápido al hacer click
+  const { addToRequest, addToTracking } = useCart();
   const [actionFeedback, setActionFeedback] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    if (!isOpen) {
-      setActionFeedback({});
-    }
-  }, [isOpen]);
-
-  if (!isOpen || !health || variants.length === 0) return null;
+  // ✅ AGREGA ESTO: Un manejador de cierre limpio
+  const handleCloseModal = () => {
+    setActionFeedback({}); // 1. Limpiamos la memoria del botón visual
+    onClose();             // 2. Le avisamos al Padre (StockTable) que cierre el modal
+  };
 
   // --- LÓGICA DE VISUALIZACIÓN ---
   const productTitle = variants[0]?.description || 'Producto Sin Nombre';
@@ -86,15 +84,16 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
     });
   }, [variants, sizeMap]);
 
+  if (!isOpen || !health || variants.length === 0) return null;
 
   // --- HANDLERS DE ACCIÓN (Individuales por fila) ---
   
   const handleAddTracking = (rowSku: string, size: string) => {
     if (isReadOnlyMode) return;
     addToTracking({
-      sku: groupSku, // Seguimos el grupo, o podrías seguir el SKU específico rowSku
+      sku: rowSku, // ✅ Ahora usamos el SKU específico (ej: 0000_GP00_M) en lugar del grupo
       description: `${productTitle} (Talla ${size})`,
-      timestamp: Date.now(),
+      timestamp: getTimestamp(), 
       originStore: currentStoreName!
     });
     triggerFeedback(size, 'track');
@@ -107,7 +106,7 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
       sizes: [size],
       area: variants[0]?.area || 'General',
       description: productTitle,
-      timestamp: Date.now(),
+      timestamp: getTimestamp(),
       originStore: currentStoreName!
     });
     triggerFeedback(size, 'req');
@@ -136,10 +135,16 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
 
   // 🧠 Lógica de Consejo (La columna derecha de tu dibujo)
   const renderAdvice = (row: typeof gridRows[0]) => {
-    if (row.stock >= 2) return null; // "No Necesita" (según dibujo)
-
     // Si es 0 o 1, analizamos qué hacer
     if (row.cd > 0) {
+      if (row.stock >= 2) {
+        return (
+          <div className="text-xs leading-tight">
+            <span className="text-blue-600 font-bold block mb-1">¿Necesitas más?</span>
+            <span className="text-gray-500">Hay {row.cd} en CD.</span>
+          </div>
+        );  
+    } else {    
       return (
         <div className="text-xs leading-tight">
           <span className="text-green-700 font-bold block mb-1">¡Pide Ya!</span>
@@ -147,11 +152,21 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
         </div>
       );
     }
+  }
     if (row.transit > 0) {
       return (
         <div className="text-xs leading-tight">
-          <span className="text-orange-600 font-bold block mb-1">Viene...</span>
-          <span className="text-gray-500">Llegan {row.transit}.</span>
+          <span className="text-orange-600 font-bold block mb-1">En Tránsito</span>
+          <span className="text-gray-500">Ya viene. {row.transit}.</span>
+        </div>
+      );
+    }
+
+        if (row.stock >= 2) { 
+      return (
+        <div className="text-xs leading-tight">
+          <span className="text-gray-500 font-bold block mb-1">Agotado</span>
+          <span className="text-gray-400">Solo stock local.</span>
         </div>
       );
     }
@@ -159,7 +174,7 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
     return (
       <div className="text-xs leading-tight">
         <span className="text-red-600 font-bold block mb-1">Agotado</span>
-        <span className="text-gray-400">Sin respaldo.</span>
+        <span className="text-gray-400">Nada que hacer.</span>
       </div>
     );
   };
@@ -183,7 +198,7 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
             </div>
             <p className="text-xs text-gray-400 font-mono">SKU BASE: {groupSku}</p>
           </div>
-          <button onClick={onClose} className="p-2 -mr-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors">
+          <button onClick={handleCloseModal} className="p-2 -mr-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors">
             ✕
           </button>
         </div>
@@ -196,8 +211,8 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
                 <th className="px-6 py-3 font-semibold text-center w-24">Talla</th>
                 <th className="px-6 py-3 font-semibold text-center w-24">Stock</th>
                 <th className="px-6 py-3 font-semibold text-center w-24 text-blue-600">Vta 2W</th>
-                <th className="px-6 py-3 font-semibold text-center">Acción</th>
-                <th className="px-6 py-3 font-semibold text-left">Diagnóstico / Solicitud</th>
+                <th className="px-6 py-3 font-semibold text-center">Seguimiento</th>
+                <th className="px-6 py-3 font-semibold text-left">Diagnóstico</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
@@ -246,7 +261,7 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
                       </div>
 
                       {/* Botón de Añadir a Solicitud */}
-                      {(row.stock < 2 && !isReadOnlyMode) && (
+                      {(!isReadOnlyMode) && (
                         <button
                           onClick={() => handleAddRequest(row.sizeName)}
                           className={`px-3 py-1.5 text-xs font-bold rounded shadow-sm border transition-all whitespace-nowrap ${

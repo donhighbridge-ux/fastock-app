@@ -4,7 +4,7 @@ import { db } from './firebase-config';
 import { CartProvider, useCart } from './context/CartContext';
 import FileUpload from './components/FileUpload';
 import DashboardFilters from './components/Dashboard/DashboardFilters';
-import StockTable from './components/StockTable';
+import { StockDashboard } from './components/StockDashboard';
 import RequestCartView from './components/RequestCartView';
 import { TrackingListView } from './components/TrackingListView';
 import StockHealthFilters from './components/Dashboard/StockHealthFilters';
@@ -442,7 +442,6 @@ function App() {
   const groupedProducts = useStockGrouping(
     data,                     // Data cruda de Firebase (NormalizedRow)
     productDictionary,        // Tu diccionario de nombres (estado productDictionary)
-    sizeMap,                  // Tu mapa de tallas (estado sizeMap)
     currentSearchTerm,        // Lo que el usuario escribe en la barra (string)
     currentFilters.tienda === ALL_STORES_ID // ¿Estamos viendo todas las tiendas? (true/false)
   );
@@ -533,7 +532,7 @@ function App() {
                     onChange={setSubFilters} 
                   />
                   <div className="min-h-[500px] transition-all duration-300">
-                    <StockTable 
+                    <StockDashboard 
                       data={filteredData} 
                       productDictionary={productDictionary} 
                       isMultiStore={currentFilters.tienda === ALL_STORES_ID}

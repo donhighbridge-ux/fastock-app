@@ -15,8 +15,8 @@ interface StockTableProps {
 }
 
 const StockTable: React.FC<StockTableProps> = ({ 
-  products, 
-  rawData, 
+  products = [], 
+  rawData = [], 
   isMultiStore = false, 
   currentStoreName, 
   sizeMap 
