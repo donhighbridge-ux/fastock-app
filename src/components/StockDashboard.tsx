@@ -8,7 +8,7 @@ interface StockDashboardProps {
   productDictionary: Record<string, string>;
   isMultiStore: boolean;
   searchTerm: string;
-  subFilters: { health: string; status: string }; // Los filtros de semáforo
+  filters: { health: string; sort: string };
   sizeMap: Record<string, string>; // Se necesita pasar a la tabla para el Modal
   currentStoreName?: string;
 }
@@ -18,7 +18,7 @@ export const StockDashboard: React.FC<StockDashboardProps> = ({
   productDictionary,
   isMultiStore, 
   searchTerm,
-  subFilters,
+  filters,
   sizeMap,
   currentStoreName
 }) => {
@@ -27,31 +27,41 @@ export const StockDashboard: React.FC<StockDashboardProps> = ({
   const groupedData = useStockGrouping(data, productDictionary, searchTerm, isMultiStore);
 
   // 2. EL FILTRO: Aplicamos la lógica de semáforo aquí (antes estaba en la tabla)
-  const filteredProducts = useMemo(() => {
-    return groupedData.filter((item) => {
+  const processedProducts = useMemo(() => {
+    let result = groupedData;
+
       // Filtro de Salud (Semáforo Nuevo)
-      if (subFilters?.health && subFilters.health !== 'all') {
-        const h = subFilters.health.toLowerCase();
+      if (filters?.health && filters.health !== 'all') {
+        const h = filters.health.toLowerCase();
+        result = result.filter((item) => {
         // Mapeamos el valor del select a los status del item
         if (h === 'incompleto' && item.health.status !== 'INCOMPLETO') return false;
         if (h === 'poco' && item.health.status !== 'QUEDA POCO') return false;
         if (h === 'completo' && item.health.status !== 'COMPLETO') return false; // Ajusta si usas 'ok' o 'completo'
-      }
-
-      // Filtro de Estado de Negocio (Si lo conservas)
-      if (subFilters?.status && subFilters.status !== 'all') {
-        // Aquí iría tu lógica antigua de status si la sigues usando
-        // Por ahora lo dejamos pasante o ajustas según tu necesidad real
-      }
-
-      return true;
-    });
-  }, [groupedData, subFilters]);
+        return true;
+      });
+    }
+      // Tier 3: Ordenamiento
+      if (filters.sort && filters.sort !== 'none') {
+      // Usamos [...result] para crear una copia y no mutar el array original (Regla de React)
+      result = [...result].sort((a, b) => {
+        switch (filters.sort) {
+          case 'sales_desc': return b.sales2w - a.sales2w; // Venta Mayor a Menor
+          case 'sales_asc': return a.sales2w - b.sales2w;  // Venta Menor a Mayor
+          case 'stock_desc': return b.stock - a.stock;     // Stock Mayor a Menor
+          case 'stock_asc': return a.stock - b.stock;      // Stock Menor a Mayor
+        default: return 0;
+      } 
+    });      
+  }
+ 
+    return result;  
+  }, [groupedData, filters.health, filters.sort]);
 
   // 3. RENDERIZAMOS LA TABLA (Pasamos 'products' procesados y 'rawData' para los modales)
   return (
     <StockTable 
-      products={filteredProducts} 
+      products={processedProducts} 
       rawData={data} 
       isMultiStore={isMultiStore}
       sizeMap={sizeMap}

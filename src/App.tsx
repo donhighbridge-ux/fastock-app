@@ -7,7 +7,6 @@ import DashboardFilters from './components/Dashboard/DashboardFilters';
 import { StockDashboard } from './components/StockDashboard';
 import RequestCartView from './components/RequestCartView';
 import { TrackingListView } from './components/TrackingListView';
-import StockHealthFilters from './components/Dashboard/StockHealthFilters';
 import type { NormalizedRow } from './types';
 import NotificationBell from './components/NotificationBell';
 import './App.css';
@@ -143,8 +142,9 @@ function App() {
     tienda: string | null;
     area: string | null;
     categoria: string | null;
-  }>({ marca: null, tienda: null, area: null, categoria: null });
-  const [subFilters, setSubFilters] = useState({ health: 'all', status: 'all' });
+    health: string;
+    sort: string;
+  }>({ marca: null, tienda: null, area: null, categoria: null, health: 'all', sort: 'none'});
   
   const [isDashboardActive, setIsDashboardActive] = useState(false);
   const [currentSearchTerm, setCurrentSearchTerm] = useState('');
@@ -432,7 +432,6 @@ function App() {
     // 3. Limpiamos el buscador.
     setCurrentSearchTerm('');
     setSearchTermInput('');
-    setSubFilters({ health: 'all', status: 'all' });
   };
 
   // =========================================================================
@@ -520,16 +519,12 @@ function App() {
                     </button>
                   </div>
                   <DashboardFilters 
-                    data={data} 
-                    onFilter={handleFilterChange} 
-                    onSearch={handleSearch} 
-                    selectedFilters={currentFilters} 
+                    searchTerm={searchTermInput} 
+                    onSearch={handleSearch}
+                    filters={currentFilters} 
+                    onFilterChange={(newFilters) => setCurrentFilters(prev => ({ ...prev, ...newFilters }))} 
                     areas={availableOptions.areas}
                     categories={availableOptions.categories}
-                  />
-                  <StockHealthFilters 
-                    filters={subFilters} 
-                    onChange={setSubFilters} 
                   />
                   <div className="min-h-[500px] transition-all duration-300">
                     <StockDashboard 
@@ -538,7 +533,7 @@ function App() {
                       isMultiStore={currentFilters.tienda === ALL_STORES_ID}
                       searchTerm={currentSearchTerm}
                       currentStoreName={currentFilters.tienda || 'Global'}
-                      subFilters={subFilters}
+                      filters={currentFilters}
                       sizeMap={sizeMap}
                     />
                   </div>
