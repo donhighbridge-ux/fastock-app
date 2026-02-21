@@ -25,6 +25,7 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
   
   const { addToRequest, addToTracking } = useCart();
   const [actionFeedback, setActionFeedback] = useState<Record<string, string>>({});
+  const [draftRa, setDraftRa] = useState<Record<string, number>>({});
 
   // ✅ AGREGA ESTO: Un manejador de cierre limpio
   const handleCloseModal = () => {
@@ -46,6 +47,7 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
       sales: number;
       transit: number;
       cd: number;
+      ra: number;
       skuCompleto: string;
     }>();
 
@@ -59,9 +61,10 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
       const sales = Number(v.sales2w) || 0;
       const transit = Number(v.transit) || 0;
       const cd = Number(v.stock_cd) || 0;
+      const ra = Number(v.ra) || 0;
 
       if (!rowsMap.has(cleanSize)) {
-        rowsMap.set(cleanSize, { sizeName: cleanSize, stock, sales, transit, cd, skuCompleto: v.sku });
+        rowsMap.set(cleanSize, { sizeName: cleanSize, stock, sales, transit, cd, ra, skuCompleto: v.sku });
       } else {
         // Si hubiera duplicados, sumamos (caso borde)
         const existing = rowsMap.get(cleanSize)!;
@@ -69,6 +72,7 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
         existing.sales += sales;
         existing.transit += transit;
         existing.cd += cd;
+        existing.ra = ra;
       }
     });
 
@@ -112,7 +116,7 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
     triggerFeedback(size, 'req');
   };
 
-  const triggerFeedback = (id: string, type: 'track' | 'req') => {
+  const triggerFeedback = (id: string, type: 'track' | 'req' | 'ra') => {
     const key = `${id}-${type}`;
     setActionFeedback(prev => ({ ...prev, [key]: 'success' }));
     setTimeout(() => {
@@ -122,6 +126,32 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
         return next;
       });
     }, 2000);
+  };
+
+  // ✅ NUEVO: Maneja los clics en las flechitas de RA (+ y -)
+  const handleRaChange = (size: string, delta: number, currentRa: number) => {
+    setDraftRa(prev => {
+      const currentDraft = prev[size] ?? currentRa;
+      const nextVal = Math.max(0, currentDraft + delta); // Evita RA negativas
+      return { ...prev, [size]: nextVal };
+    });
+  };
+
+  // ✅ NUEVO: Envía la nueva RA al carrito de solicitudes
+  const handleAddRaRequest = (size: string, newRa: number) => {
+    if (isReadOnlyMode) return;
+    
+    // NOTA: Por ahora usamos addToRequest estándar, pero le ponemos un aviso en la descripción.
+    // En la siguiente fase, enseñaremos al CartContext a separar Pedidos de Modificaciones de RA.
+    addToRequest({
+      sku: groupSku,
+      sizes: [size],
+      area: variants[0]?.area || 'General',
+      description: `${productTitle} (PROPUESTA NUEVA RA: ${newRa})`,
+      timestamp: getTimestamp(),
+      originStore: currentStoreName!
+    });
+    triggerFeedback(size, 'ra'); // Da el feedback visual ("✓ Añadido")
   };
 
   // --- RENDER HELPERS ---
@@ -208,11 +238,12 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
           <table className="w-full text-sm text-left">
             <thead className="text-xs text-gray-500 uppercase bg-gray-100 border-b border-gray-200 sticky top-0 shadow-sm">
               <tr>
-                <th className="px-6 py-3 font-semibold text-center w-24">Talla</th>
-                <th className="px-6 py-3 font-semibold text-center w-24">Stock</th>
-                <th className="px-6 py-3 font-semibold text-center w-24 text-blue-600">Vta 2W</th>
-                <th className="px-6 py-3 font-semibold text-center">Seguimiento</th>
-                <th className="px-6 py-3 font-semibold text-left">Diagnóstico</th>
+                <th className="px-4 py-3 font-semibold text-center w-24">Talla</th>
+                <th className="px-4 py-3 font-semibold text-center w-24">Stock</th>
+                <th className="px-4 py-3 font-semibold text-center w-24 text-blue-600">Vta 2W</th>
+                <th className="px-4 py-3 font-semibold text-center w-28 text-purple-600">RA</th>
+                <th className="px-4 py-3 font-semibold text-left">Diagnóstico</th>
+                <th className="px-4 py-3 font-semibold text-center">Seguimiento</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
@@ -220,24 +251,64 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
                 <tr key={row.sizeName} className="hover:bg-blue-50/50 transition-colors">
                   
                   {/* TALLA */}
-                  <td className="px-6 py-4 text-center font-bold text-gray-700 text-lg">
+                  <td className="px-4 py-4 text-center font-bold text-gray-700 text-lg">
                     {row.sizeName}
                   </td>
                   
                   {/* STOCK (Semáforo Individual) */}
-                  <td className="px-6 py-4 text-center">
+                  <td className="px-4 py-4 text-center">
                     <span className={`inline-block w-12 py-1 rounded ${getStockColorClass(row.stock)}`}>
                       {row.stock}
                     </span>
                   </td>
                   
                   {/* VENTAS */}
-                  <td className="px-6 py-4 text-center font-medium text-gray-600">
+                  <td className="px-4 py-4 text-center font-medium text-gray-600">
                     {row.sales}
                   </td>
 
+                  {/* RA */}
+                  <td className="px-4 py-4 text-center">
+                    <div className="flex flex-col items-center gap-1.5">
+                      {/* El control de numerito con flechas */}
+                      <div className="flex items-center gap-2 bg-gray-50 rounded px-2 py-1 border border-gray-200">
+                        <button 
+                          onClick={() => handleRaChange(row.sizeName, -1, row.ra)} 
+                          disabled={isReadOnlyMode}
+                          className="text-gray-400 hover:text-red-500 font-bold px-1 disabled:opacity-50"
+                        >
+                          -
+                        </button>
+                        <span className="font-bold text-gray-800 w-4 text-center">
+                          {draftRa[row.sizeName] ?? row.ra}
+                        </span>
+                        <button 
+                          onClick={() => handleRaChange(row.sizeName, 1, row.ra)} 
+                          disabled={isReadOnlyMode}
+                          className="text-gray-400 hover:text-green-500 font-bold px-1 disabled:opacity-50"
+                        >
+                          +
+                        </button>
+                      </div>
+                      
+                      {/* Botón +Aumentar (Solo aparece si el usuario modificó el número) */}
+                      {((draftRa[row.sizeName] ?? row.ra) !== row.ra && !isReadOnlyMode) && (
+                        <button
+                          onClick={() => handleAddRaRequest(row.sizeName, draftRa[row.sizeName]!)}
+                          className={`text-[10px] px-2 py-1 rounded font-bold shadow-sm border transition-all whitespace-nowrap ${
+                            actionFeedback[`${row.sizeName}-ra`] 
+                            ? 'bg-purple-600 text-white border-purple-600' 
+                            : 'bg-white text-purple-600 border-purple-200 hover:bg-purple-50'
+                          }`}
+                        >
+                          {actionFeedback[`${row.sizeName}-ra`] ? 'Añadido ✓' : '+ Aumentar'}
+                        </button>
+                      )}
+                    </div>
+                  </td>
+
                   {/* ACCIONES (Seguir) */}
-                  <td className="px-6 py-4 text-center">
+                  <td className="px-4 py-4 text-center">
                      <button
                        onClick={() => handleAddTracking(row.skuCompleto, row.sizeName)}
                        disabled={isReadOnlyMode}
@@ -253,7 +324,7 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
                   </td>
 
                   {/* SOLICITUD / DIAGNÓSTICO (Columna Derecha del Dibujo) */}
-                  <td className="px-6 py-4">
+                  <td className="px-4 py-4">
                     <div className="flex items-center justify-between gap-4">
                       {/* El texto de consejo */}
                       <div className="flex-1">
