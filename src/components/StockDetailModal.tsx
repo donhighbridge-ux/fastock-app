@@ -242,8 +242,9 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
                 <th className="px-4 py-3 font-semibold text-center w-24">Stock</th>
                 <th className="px-4 py-3 font-semibold text-center w-24 text-blue-600">Vta 2W</th>
                 <th className="px-4 py-3 font-semibold text-center w-28 text-purple-600">RA</th>
-                <th className="px-4 py-3 font-semibold text-left">Diagnóstico</th>
-                <th className="px-4 py-3 font-semibold text-center">Seguimiento</th>
+                <th className="px-4 py-3 font-semibold text-center w-24">Diagnóstico</th>
+                <th className="px-4 py-3 font-semibold text-center w-24">Seguimiento</th>
+                <th className="px-4 py-3 font-semibold text-center w-24">Solicitar</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200 bg-white">
@@ -307,6 +308,11 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
                     </div>
                   </td>
 
+                  {/* 1. CELDA DIAGNÓSTICO */}
+                  <td className="px-4 py-4 text-left">
+                     {renderAdvice(row)}
+                  </td>
+
                   {/* ACCIONES (Seguir) */}
                   <td className="px-4 py-4 text-center">
                      <button
@@ -323,28 +329,20 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
                      </button>
                   </td>
 
-                  {/* SOLICITUD / DIAGNÓSTICO (Columna Derecha del Dibujo) */}
-                  <td className="px-4 py-4">
-                    <div className="flex items-center justify-between gap-4">
-                      {/* El texto de consejo */}
-                      <div className="flex-1">
-                        {renderAdvice(row)}
-                      </div>
-
-                      {/* Botón de Añadir a Solicitud */}
-                      {(!isReadOnlyMode) && (
-                        <button
-                          onClick={() => handleAddRequest(row.sizeName)}
-                          className={`px-3 py-1.5 text-xs font-bold rounded shadow-sm border transition-all whitespace-nowrap ${
-                             actionFeedback[`${row.sizeName}-req`]
-                             ? 'bg-green-600 text-white border-green-600'
-                             : 'bg-white text-blue-600 border-blue-200 hover:bg-blue-50'
-                          }`}
-                        >
-                          {actionFeedback[`${row.sizeName}-req`] ? 'Añadido' : '+ Solicitar'}
-                        </button>
-                      )}
-                    </div>
+                  {/* 2. CELDA SOLICITAR */}
+                  <td className="px-4 py-4 text-center">
+                    {(!isReadOnlyMode) && (
+                      <button
+                        onClick={() => handleAddRequest(row.sizeName)}
+                        className={`px-3 py-1.5 text-xs font-bold rounded shadow-sm border transition-all whitespace-nowrap ${
+                           actionFeedback[`${row.sizeName}-req`]
+                           ? 'bg-green-600 text-white border-green-600'
+                           : 'bg-white text-blue-600 border-blue-200 hover:bg-blue-50'
+                        }`}
+                      >
+                        {actionFeedback[`${row.sizeName}-req`] ? 'Añadido' : '+ Solicitar'}
+                      </button>
+                    )}
                   </td>
 
                 </tr>
