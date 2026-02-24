@@ -1,5 +1,6 @@
 import React from 'react';
-import { useCart, type CartItem } from '../context/CartContext';
+import { type CartItem } from '../context/CartContext';
+import { useCart } from '../context/useCart';
 import type { NormalizedRow } from '../types';
 
 interface RequestCartViewProps {
