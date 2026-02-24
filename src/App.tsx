@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { collection, onSnapshot, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from './firebase-config';
-import { CartProvider, useCart } from './context/CartContext';
+import { CartProvider } from './context/CartContext';
+import { useCart } from './context/useCart'; 
 import FileUpload from './components/FileUpload';
 import DashboardFilters from './components/Dashboard/DashboardFilters';
 import { StockDashboard } from './components/StockDashboard';

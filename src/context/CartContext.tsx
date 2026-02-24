@@ -1,31 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-
-export interface CartItem {
-  sku: string;
-  sizes: string[];
-  area: string;
-  description: string;
-  timestamp: number;
-  originStore?: string;
-}
-
-export interface TrackingItem {
-  sku: string;
-  description: string;
-  timestamp: number;
-  originStore?: string;
-}
-
-interface CartContextType {
-  requestList: CartItem[];
-  trackingList: TrackingItem[];
-  addToRequest: (item: CartItem) => void;
-  addToTracking: (item: TrackingItem) => void;
-  removeFromRequest: (sku: string, originStore?: string) => void;
-  removeFromTracking: (sku: string, originStore?: string) => void;
-}
-
-const CartContext = createContext<CartContextType | undefined>(undefined);
+import React, { useState, useEffect, type ReactNode } from 'react';
+import { CartContext, type CartItem, type TrackingItem } from './useCart';
 
 export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [requestList, setRequestList] = useState<CartItem[]>(() => {
@@ -48,15 +22,28 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const addToRequest = (item: CartItem) => {
     setRequestList((prev) => {
-      // Si el SKU ya existe, fusionamos las tallas para evitar duplicados
-      const existingIndex = prev.findIndex((i) => i.sku === item.sku && i.originStore === item.originStore);
+      const type = item.requestType || 'stock';
+      const existingIndex = prev.findIndex(
+        (i) => i.sku === item.sku && 
+               i.originStore === item.originStore && 
+               (i.requestType || 'stock') === type
+      );
+
       if (existingIndex >= 0) {
         const updated = [...prev];
-        const mergedSizes = Array.from(new Set([...updated[existingIndex].sizes, ...item.sizes]));
-        updated[existingIndex] = { ...updated[existingIndex], sizes: mergedSizes, timestamp: Date.now() };
+        const existingItem = updated[existingIndex];
+        const mergedSizes = Array.from(new Set([...existingItem.sizes, ...item.sizes]));
+        const mergedRaMap = { ...(existingItem.proposedRaMap || {}), ...(item.proposedRaMap || {}) };
+
+        updated[existingIndex] = { 
+          ...existingItem, 
+          sizes: mergedSizes, 
+          proposedRaMap: mergedRaMap,
+          timestamp: Date.now() 
+        };
         return updated;
       }
-      return [...prev, item];
+      return [...prev, { ...item, requestType: type }];
     });
   };
 
@@ -67,12 +54,12 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
   };
 
-  const removeFromRequest = (sku: string, originStore?: string) => {
+  const removeFromRequest = (sku: string, originStore?: string, requestType: 'stock' | 'ra' = 'stock') => {
     setRequestList((prev) => prev.filter((item) => {
-      if (originStore) {
-        return !(item.sku === sku && item.originStore === originStore);
-      }
-      return item.sku !== sku;
+      const matchSku = item.sku === sku;
+      const matchStore = originStore ? item.originStore === originStore : true;
+      const matchType = (item.requestType || 'stock') === requestType;
+      return !(matchSku && matchStore && matchType);
     }));
   };
 
@@ -90,12 +77,4 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       {children}
     </CartContext.Provider>
   );
-};
-
-export const useCart = () => {
-  const context = useContext(CartContext);
-  if (context === undefined) {
-    throw new Error('useCart must be used within a CartProvider');
-  }
-  return context;
 };

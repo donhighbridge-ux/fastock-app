@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import type { NormalizedRow, StockHealth } from '../types';
-import { useCart } from '../context/CartContext';
+import { useCart } from '../context/useCart';
 
 interface StockDetailModalProps {
   isOpen: boolean;
