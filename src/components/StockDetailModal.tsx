@@ -111,7 +111,8 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
       area: variants[0]?.area || 'General',
       description: productTitle,
       timestamp: getTimestamp(),
-      originStore: currentStoreName!
+      originStore: currentStoreName!,
+      requestType: 'stock' // ✅ Le decimos explícitamente que es stock normal
     });
     triggerFeedback(size, 'req');
   };
@@ -147,9 +148,11 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
       sku: groupSku,
       sizes: [size],
       area: variants[0]?.area || 'General',
-      description: `${productTitle} (PROPUESTA NUEVA RA: ${newRa})`,
+      description: productTitle,
       timestamp: getTimestamp(),
-      originStore: currentStoreName!
+      originStore: currentStoreName!,
+      requestType: 'ra', // ✅ Etiqueta estricta
+      proposedRaMap: { [size]: newRa } // ✅ Enviamos el diccionario numérico
     });
     triggerFeedback(size, 'ra'); // Da el feedback visual ("✓ Añadido")
   };
