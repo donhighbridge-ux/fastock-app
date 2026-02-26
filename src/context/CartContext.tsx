@@ -72,8 +72,18 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }));
   };
 
+  const clearRequest = (originStore?: string) => {
+    if (originStore) {
+      // Si nos pasan una tienda, borramos SOLO lo de esa tienda
+      setRequestList((prev) => prev.filter(item => item.originStore !== originStore));
+    } else {
+      // Si no nos pasan nada (Vista Global), bombardeo orbital: borramos TODO
+      setRequestList([]);
+    }
+  };
+
   return (
-    <CartContext.Provider value={{ requestList, trackingList, addToRequest, addToTracking, removeFromRequest, removeFromTracking }}>
+    <CartContext.Provider value={{ requestList, trackingList, addToRequest, addToTracking, removeFromRequest, removeFromTracking, clearRequest }}>
       {children}
     </CartContext.Provider>
   );

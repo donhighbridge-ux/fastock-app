@@ -151,8 +151,9 @@ function App() {
   const [currentSearchTerm, setCurrentSearchTerm] = useState('');
   const [searchTermInput, setSearchTermInput] = useState(''); // Estado local para el input
   const [trackingNotification, setTrackingNotification] = useState<number | null>(null);
-
+  
   const fetchStockData = async () => {
+    
     console.log("📡 Obteniendo datos de Firebase...", ORGANIZATION_ID);
     setIsLoading(true);
     try {
@@ -247,6 +248,7 @@ function App() {
 
 
   // Suscripción al Diccionario
+  
   useEffect(() => {
     let unsubscribeFallback: (() => void) | undefined;
     const dictRef = collection(db, "organizations", ORGANIZATION_ID, "product_dictionary");

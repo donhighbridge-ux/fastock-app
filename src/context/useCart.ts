@@ -26,6 +26,7 @@ export interface CartContextType {
   addToTracking: (item: TrackingItem) => void;
   removeFromRequest: (sku: string, originStore?: string, requestType?: 'stock' | 'ra') => void;
   removeFromTracking: (sku: string, originStore?: string) => void;
+  clearRequest: (originStore?: string) => void;
 }
 
 // 2. Exportamos el Contexto
