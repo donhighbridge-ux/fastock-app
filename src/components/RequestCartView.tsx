@@ -1,6 +1,7 @@
 import React from 'react';
 import { useCart, type CartItem } from '../context/useCart';
 import { useMagicSweep } from '../hooks/useMagicSweep'; // <-- IMPORTAMOS EL MOTOR
+import { generarExcelGradoMilitar } from '../utils/excelGenerator';
 import type { NormalizedRow } from '../types';
 
 interface RequestCartViewProps {
@@ -42,35 +43,10 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore })
     }
   };
 
-  // (Temporal) Tu función actual de CSV, la cambiaremos a Excel pronto
-  const handleDownloadCSV = (area: string, items: CartItem[]) => {
-    const headers = ['SKU', 'Descripción', 'Tallas/RA', 'Tipo', 'Área', 'Tienda Origen'];
-    const rows = items.map(item => {
-      const isRa = item.requestType === 'ra';
-      // Formatea el diccionario RA si existe, si no, usa las tallas
-      const detail = isRa && item.proposedRaMap 
-        ? Object.entries(item.proposedRaMap).map(([size, ra]) => `${size}:${ra}`).join(' | ')
-        : item.sizes.join(', ');
-      
-      return [
-        item.sku,
-        `"${item.description.replace(/"/g, '""')}"`,
-        `"${detail}"`,
-        isRa ? 'Propuesta RA' : 'Solicitud Stock',
-        item.area,
-        item.originStore || 'Global'
-      ];
-    });
-
-    const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `Solicitud_${area}_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+  // Exportación a Excel Grado Militar
+  const handleDownloadExcel = () => {
+    const storeNameForExcel = currentStore && currentStore !== 'all' ? currentStore : 'Consolidado';
+    generarExcelGradoMilitar(requestList, data, storeNameForExcel);
   };
 
   return (
@@ -103,6 +79,14 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore })
             >
               ⚡ Añadir Óptimos
             </button>
+          
+            <button
+              onClick={handleDownloadExcel}
+              disabled={filteredList.length === 0}
+              className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-bold py-2 px-6 rounded-lg shadow transition-colors flex items-center gap-2"
+            >
+              📊 Exportar Excel
+            </button>
           </div>
           
           {sweepFeedback && (
@@ -133,12 +117,6 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore })
             <div key={area} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
               <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
                 <h3 className="text-lg font-bold text-gray-800 uppercase tracking-wide">{area}</h3>
-                <button
-                  onClick={() => handleDownloadCSV(area, items)}
-                  className="text-sm bg-indigo-600 hover:bg-indigo-700 text-white py-1.5 px-4 rounded-md font-medium transition-colors shadow-sm"
-                >
-                  Descargar CSV
-                </button>
               </div>
 
               <div className="p-6 space-y-8">

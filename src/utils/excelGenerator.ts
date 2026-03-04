@@ -7,83 +7,106 @@ export const generarExcelGradoMilitar = async (
   allData: NormalizedRow[], 
   storeName: string
 ) => {
-  // 1. Creamos el Libro de Excel y la Pestaña
+  // 1. Iniciamos el motor del libro
   const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet('Solicitud de Stock');
 
-  // 2. Configuramos el ancho de las columnas (como en tu CSV)
-  sheet.columns = [
-    { header: '', key: 'colA', width: 25 }, // SKU
-    { header: '', key: 'colB', width: 10 }, // Stock CD
-    { header: '', key: 'colC', width: 12 }, // Stock Tienda
-    { header: '', key: 'colD', width: 10 }, // Tránsito
-    { header: '', key: 'colE', width: 12 }, // Venta 2W Estilo
-    { header: '', key: 'colF', width: 10 }, // Venta 2W
-    { header: '', key: 'colG', width: 8 },  // RA
-    { header: '', key: 'colH', width: 12 }, // Sugerencia
-    { header: '', key: 'colI', width: 5 },  // Vacía
-    { header: '', key: 'colJ', width: 30 }, // Notas (Descripción)
-  ];
-
-  let currentRow = 1;
-
-  // 3. Filtramos solo los pedidos de stock (Ignoramos los de RA por ahora)
+  // 2. Filtramos solo los pedidos de stock
   const stockItems = requestList.filter(item => (item.requestType || 'stock') === 'stock');
 
-  // 4. Bucle Maestro: Por cada producto en el carrito, creamos un bloque
-  for (const item of stockItems) {
-    // Espaciado: 2 filas en blanco (como tu CSV)
-    currentRow += 2;
+  // 3. AGRUPAMIENTO INTELIGENTE POR ÁREA (El núcleo de la Opción B)
+  const groupedByArea = stockItems.reduce((acc, item) => {
+    const area = item.area || 'Sin Área'; // Si un producto no tiene área, lo manda aquí
+    if (!acc[area]) {
+      acc[area] = [];
+    }
+    acc[area].push(item);
+    return acc;
+  }, {} as Record<string, CartItem[]>);
 
-    // Fila Identificadora de Tienda (GAP VIÑA DEL MAR)
-    sheet.getCell(`C${currentRow}`).value = `GAP ${storeName.toUpperCase()}`;
-    sheet.getCell(`C${currentRow}`).font = { bold: true };
-    currentRow++;
+  // Seguridad: Si el carrito está extrañamente vacío, creamos una hoja en blanco para que no falle
+  if (Object.keys(groupedByArea).length === 0) {
+    workbook.addWorksheet('Vacío');
+  }
 
-    // Fila de Código y Descripción
-    sheet.getCell(`C${currentRow}`).value = '1007'; // Tu código de tienda (puedes hacerlo dinámico luego)
-    sheet.getCell(`J${currentRow}`).value = item.description;
-    sheet.getCell(`J${currentRow}`).font = { italic: true };
-    currentRow++;
+  // 4. BUCLE PRINCIPAL: Iteramos por cada Área (HOMBRE, MUJER, etc.)
+  for (const [areaName, items] of Object.entries(groupedByArea)) {
+    // Excel tiene reglas estrictas: Nombres de pestaña máx 31 caracteres y sin símbolos raros
+    const safeAreaName = areaName.substring(0, 31).replace(/[\\/*?:[\]]/g, '');
+    
+    // Creamos la pestaña con el nombre del Área
+    const sheet = workbook.addWorksheet(safeAreaName);
 
-    // Fila de Encabezados Grises
-    const headerRow = sheet.getRow(currentRow);
-    headerRow.values = ['SKU', 'Stock CD', 'Stock tienda', 'Tránsito', 'Venta 2W estilo.', 'Venta 2W', 'RA.', 'Sugerencia.', '', ''];
-    headerRow.eachCell((cell) => {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F3F3' } };
-      cell.font = { bold: true };
-      cell.alignment = { horizontal: 'center' };
-    });
-    currentRow++;
+    // Configuramos el ancho de las columnas exclusivas para ESTA pestaña
+    sheet.columns = [
+      { header: '', key: 'colA', width: 25 }, // SKU
+      { header: '', key: 'colB', width: 10 }, // Stock CD
+      { header: '', key: 'colC', width: 12 }, // Stock Tienda
+      { header: '', key: 'colD', width: 10 }, // Tránsito
+      { header: '', key: 'colE', width: 12 }, // Venta 2W Estilo
+      { header: '', key: 'colF', width: 10 }, // Venta 2W
+      { header: '', key: 'colG', width: 8 },  // RA
+      { header: '', key: 'colH', width: 12 }, // Sugerencia
+      { header: '', key: 'colI', width: 5 },  // Vacía
+      { header: '', key: 'colJ', width: 30 }, // Notas (Descripción)
+    ];
 
-    // 5. La Magia de la Curva Completa
-    // Buscamos TODAS las tallas de este modelo en la base de datos (Ej: Todas las S, M, L)
-    const curvaCompleta = allData.filter(row => row.sku.startsWith(`${item.sku}_`));
+    let currentRow = 1;
 
-    for (const filaReal of curvaCompleta) {
-      const row = sheet.getRow(currentRow);
-      
-      // Llenamos los datos (Asegúrate de que los nombres de las propiedades coincidan con tu data real)
-      row.getCell('A').value = filaReal.sku;
-      row.getCell('B').value = Number(filaReal.stock_cd) || 0;
-      row.getCell('C').value = Number(filaReal.stock) || 0;
-      row.getCell('D').value = Number(filaReal.transit) || 0;
-      row.getCell('G').value = filaReal.ra || 0;
+    // 5. BUCLE SECUNDARIO: Imprimimos los productos que pertenecen a esta Área
+    for (const item of items) {
+      currentRow += 2; // Dos filas en blanco de separador
 
-      // EL SEMÁFORO (Resaltado Amarillo)
-      // ¿Es esta talla específica una de las que el carrito determinó como críticas?
-      const tallaDeEstaFila = filaReal.sku.split('_').pop() || '';
-      if (item.sizes.includes(tallaDeEstaFila)) {
-        row.eachCell((cell) => {
-          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' } }; // Amarillo puro
-        });
-      }
-      
+      // Fila Identificadora de Tienda
+      sheet.getCell(`C${currentRow}`).value = `GAP ${storeName.toUpperCase()}`;
+      sheet.getCell(`C${currentRow}`).font = { bold: true };
       currentRow++;
+
+      // Fila de Código y Descripción
+      sheet.getCell(`C${currentRow}`).value = '1007'; // Código de tienda quemado
+      sheet.getCell(`J${currentRow}`).value = item.description;
+      sheet.getCell(`J${currentRow}`).font = { italic: true };
+      currentRow++;
+
+      // Encabezados Grises
+      const headerRow = sheet.getRow(currentRow);
+      headerRow.values = ['SKU', 'Stock CD', 'Stock tienda', 'Tránsito', 'Venta 2W estilo.', 'Venta 2W', 'RA.', 'Sugerencia.', '', ''];
+      headerRow.eachCell((cell) => {
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F3F3' } };
+        cell.font = { bold: true };
+        cell.alignment = { horizontal: 'center' };
+      });
+      currentRow++;
+
+      // Extracción de la curva completa del modelo POR TIENDA
+      const curvaCompleta = allData.filter(row => 
+        row.sku.startsWith(`${item.sku}_`) && 
+        row.tiendaNombre === item.originStore
+      );
+
+      // Llenado de Tallas
+      for (const filaReal of curvaCompleta) {
+        const row = sheet.getRow(currentRow);
+        
+        row.getCell('A').value = filaReal.sku;
+        row.getCell('B').value = Number(filaReal.stock_cd) || 0;
+        row.getCell('C').value = Number(filaReal.stock) || 0;
+        row.getCell('D').value = Number(filaReal.transit) || 0;
+        row.getCell('G').value = filaReal.ra || 0;
+
+        // Semáforo Amarillo
+        const tallaDeEstaFila = filaReal.sku.split('_').pop() || '';
+        if (item.sizes.includes(tallaDeEstaFila)) {
+          row.eachCell((cell) => {
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' } };
+          });
+        }
+        
+        currentRow++;
+      }
     }
   }
 
-  // 6. Generar y Descargar el Archivo (Nativo en el navegador)
+  // 6. Generar y Descargar
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   const url = window.URL.createObjectURL(blob);

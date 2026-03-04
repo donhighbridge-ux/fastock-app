@@ -174,6 +174,7 @@ function App() {
 
   useEffect(() => {
     fetchStockData();
+
   }, []);
 
   // Fetch del mapa de tallas desde Firebase al montar (Centralizado)
