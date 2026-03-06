@@ -29,7 +29,8 @@ export const useMagicSweep = (data: NormalizedRow[], currentStore: string | null
         valorRA === undefined || 
         valorRA === 'N/A' || 
         valorRA === 'NaN' || 
-        Number.isNaN(Number(valorRA));
+        Number.isNaN(Number(valorRA)) ||
+        Number(valorRA) <= 0; // 🛑 EL ESCUDO ANTI-CEROS
 
       // La Regla de Oro Blindada
       if (stock < 2 && cd > 0 && transit === 0 && !isNotAssigned) {

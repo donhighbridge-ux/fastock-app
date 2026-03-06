@@ -1,7 +1,7 @@
 import React from 'react';
 import { useCart, type CartItem } from '../context/useCart';
 import { useMagicSweep } from '../hooks/useMagicSweep'; // <-- IMPORTAMOS EL MOTOR
-import { generarExcelGradoMilitar } from '../utils/excelGenerator';
+import { generarReporteStock, generarReporteRA } from '../utils/excel';
 import type { NormalizedRow } from '../types';
 
 interface RequestCartViewProps {
@@ -24,6 +24,10 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore })
     ? requestList
     : requestList.filter(item => item.originStore === currentStore);
 
+    // 4.5. Validadores de tipo de solicitud
+  const hasStock = filteredList.some(item => (item.requestType || 'stock') === 'stock');
+  const hasRA = filteredList.some(item => item.requestType === 'ra');
+
   // Agrupar por Área
   const groupedItems = filteredList.reduce((acc, item) => {
     const area = item.area || 'Sin Área';
@@ -43,10 +47,16 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore })
     }
   };
 
-  // Exportación a Excel Grado Militar
-  const handleDownloadExcel = () => {
+  // Exportación a Excel - Módulo de Stock
+  const handleDownloadStock = () => {
     const storeNameForExcel = currentStore && currentStore !== 'all' ? currentStore : 'Consolidado';
-    generarExcelGradoMilitar(requestList, data, storeNameForExcel);
+    generarReporteStock(requestList, data, storeNameForExcel);
+  };
+
+  // Exportación a Excel - Módulo de RA
+  const handleDownloadRA = () => {
+    const storeNameForExcel = currentStore && currentStore !== 'all' ? currentStore : 'Consolidado';
+    generarReporteRA(requestList, data, storeNameForExcel);
   };
 
   return (
@@ -80,12 +90,22 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore })
               ⚡ Añadir Óptimos
             </button>
           
+            {/* NUEVO BOTÓN: EXPORTAR STOCK */}
             <button
-              onClick={handleDownloadExcel}
-              disabled={filteredList.length === 0}
+              onClick={handleDownloadStock}
+              disabled={!hasStock}
               className="bg-green-600 hover:bg-green-700 disabled:bg-gray-300 text-white font-bold py-2 px-6 rounded-lg shadow transition-colors flex items-center gap-2"
             >
-              📊 Exportar Excel
+              📊 Excel Stock
+            </button>
+
+            {/* NUEVO BOTÓN: EXPORTAR RA */}
+            <button
+              onClick={handleDownloadRA}
+              disabled={!hasRA}
+              className="bg-purple-600 hover:bg-purple-700 disabled:bg-gray-300 text-white font-bold py-2 px-6 rounded-lg shadow transition-colors flex items-center gap-2"
+            >
+              🟣 Excel RA
             </button>
           </div>
           

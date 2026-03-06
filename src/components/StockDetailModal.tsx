@@ -30,7 +30,8 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
   // ✅ AGREGA ESTO: Un manejador de cierre limpio
   const handleCloseModal = () => {
     setActionFeedback({}); // 1. Limpiamos la memoria del botón visual
-    onClose();             // 2. Le avisamos al Padre (StockTable) que cierre el modal
+    setDraftRa({});        // ✅ 2. EXORCISMO: Borramos los números fantasma de RA
+    onClose();             // 3. Le avisamos al Padre (StockTable) que cierre el modal
   };
 
   // --- LÓGICA DE VISUALIZACIÓN ---
