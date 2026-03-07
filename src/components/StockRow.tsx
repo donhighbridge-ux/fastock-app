@@ -7,6 +7,7 @@ interface StockRowProps {
   onOpenModal: (group: GroupedProduct) => void;
   onSalesClick: (group: GroupedProduct) => void;
   onComparativeClick: (e: React.MouseEvent, group: GroupedProduct) => void;
+  onSubstituteClick: (group: GroupedProduct) => void; // ✅ NUEVA LÍNEA
 }
 
 const StockRow: React.FC<StockRowProps> = ({ 
@@ -14,7 +15,8 @@ const StockRow: React.FC<StockRowProps> = ({
   isMultiStore, 
   onOpenModal, 
   onSalesClick, 
-  onComparativeClick 
+  onComparativeClick,
+  onSubstituteClick // ✅ NUEVO 
 }) => {
 
   // Helper de color encapsulado (o importado si lo sacas a utils)
@@ -58,12 +60,28 @@ const StockRow: React.FC<StockRowProps> = ({
             <span className="mr-1">📊</span> Comparativo
           </button>
         ) : (
-          <button
-            onClick={() => onOpenModal(product)}
-            className={`px-3 py-1.5 rounded-full text-xs font-bold transition-transform transform hover:scale-105 shadow-sm ${getStatusColor(product.health.status)}`}
-          >
-            {product.health.emoji} {product.health.status}
-          </button>
+          <div className="flex items-center justify-center gap-2">
+            <button
+              onClick={() => onOpenModal(product)}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold transition-transform transform hover:scale-105 shadow-sm ${getStatusColor(product.health.status)}`}
+            >
+             {product.health.emoji} {product.health.status}
+            </button>
+          
+          {/* BOTÓN TÁCTICO: Solo aparece si está incompleto Y tiene ventas */}
+            {product.health.status !== 'COMPLETO' && product.sales2w > 0 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSubstituteClick(product);
+                }}
+                title="Buscar sustituto de exhibición"
+                className="p-1.5 bg-indigo-50 text-indigo-600 rounded-full hover:bg-indigo-100 hover:text-indigo-800 transition-colors border border-indigo-200 shadow-sm"
+              >
+                🔄
+              </button>
+            )}
+          </div>
         )}
       </td>
 
@@ -73,11 +91,6 @@ const StockRow: React.FC<StockRowProps> = ({
         className="px-3 py-4 whitespace-nowrap text-center text-sm text-gray-600 cursor-pointer hover:bg-gray-100 hover:text-blue-600 rounded"
       >
         {product.sales2w}
-      </td>
-
-      {/* 6. RA */}
-      <td className="px-3 py-4 whitespace-nowrap text-center text-sm text-gray-500">
-        {product.ra}
       </td>
     </tr>
   );

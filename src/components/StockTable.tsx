@@ -4,6 +4,7 @@ import StockDetailModal from './StockDetailModal';
 import SimpleMetricModal from './SimpleMetricModal';
 import StockRow from './StockRow';
 import PaginationControls from './PaginationControls';
+import SubstitutionModal from './SubstitutionModal'; // ✅ NUEVO
 import { generateComparativeData } from '../utils/comparativeHelpers';
 
 interface StockTableProps {
@@ -49,6 +50,11 @@ const StockTable: React.FC<StockTableProps> = ({
     isAggregatedView?: boolean;
     aggregatedData?: AggregatedStoreData[];
   } | null>(null);
+
+  const [subModalState, setSubModalState] = useState<{
+    isOpen: boolean;
+    targetProduct: GroupedProduct | null;
+  }>({ isOpen: false, targetProduct: null }); // ✅ NUEVO
 
   // --- LÓGICA DE VISUALIZACIÓN (Paginación) ---
   const totalPages = Math.ceil(products.length / itemsPerPage);
@@ -137,7 +143,6 @@ const StockTable: React.FC<StockTableProps> = ({
               )}
               <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Disponibilidad</th>
               <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">Vta 2W</th>
-              <th className="px-3 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wider">RA</th>
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
@@ -149,6 +154,7 @@ const StockTable: React.FC<StockTableProps> = ({
                 onOpenModal={handleOpenModal}
                 onSalesClick={handleSalesClick}
                 onComparativeClick={handleComparativeClick}
+                onSubstituteClick={(product) => setSubModalState({ isOpen: true, targetProduct: product })}
               />
             ))}
           </tbody>
@@ -177,6 +183,15 @@ const StockTable: React.FC<StockTableProps> = ({
           {...metricModal} // ✅ Esto ya incluye isOpen, title, sku, data, etc.
         />
       )}
+      
+      {/* 🟢 NUEVO: MODAL DE SUSTITUCIÓN TÁCTICA */}
+      <SubstitutionModal
+        isOpen={subModalState.isOpen}
+        onClose={() => setSubModalState({ isOpen: false, targetProduct: null })}
+        targetProduct={subModalState.targetProduct}
+        localGroupedProducts={products}
+        rawAllData={rawData}
+      />
     </div>
   );
 };
