@@ -31,6 +31,7 @@ const StockTable: React.FC<StockTableProps> = ({
     isOpen: boolean;
     variants: NormalizedRow[];
     health: StockHealth | null;
+    productName?: string;
   }>({ isOpen: false, variants: [], health: null });
 
   interface AggregatedStoreData {
@@ -70,7 +71,7 @@ const StockTable: React.FC<StockTableProps> = ({
     const variants = rawData.filter(v => 
       v.sku.toLowerCase().startsWith(group.baseSku)
     );
-    setModalState({ isOpen: true, variants, health: group.health });
+    setModalState({ isOpen: true, variants, health: group.health, productName: group.name });
   };
 
   // 2. Abrir Modal Métricas (Ventas)
@@ -175,6 +176,7 @@ const StockTable: React.FC<StockTableProps> = ({
         health={modalState.health}
         sizeMap={sizeMap}
         currentStoreName={currentStoreName}
+        productName={modalState.productName}
       />
 
       {metricModal && (

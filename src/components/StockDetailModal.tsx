@@ -10,6 +10,7 @@ interface StockDetailModalProps {
   health: StockHealth | null;
   sizeMap: Record<string, string>;
   currentStoreName?: string;
+  productName?: string;
 }
 
 const getTimestamp = () => Date.now();
@@ -20,7 +21,8 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
   variants, 
   health, 
   sizeMap, 
-  currentStoreName 
+  currentStoreName,
+  productName 
 }) => {
   
   const { addToRequest, addToTracking } = useCart();
@@ -35,7 +37,7 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
   };
 
   // --- LÓGICA DE VISUALIZACIÓN ---
-  const productTitle = variants[0]?.description || 'Producto Sin Nombre';
+  const productTitle = productName || variants[0]?.description || 'Producto Sin Nombre';
   const groupSku = variants[0]?.sku?.split('_').slice(0, 2).join('_') || 'N/A';
   const isReadOnlyMode = !currentStoreName || currentStoreName === 'all';
 
@@ -262,9 +264,21 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
                   
                   {/* STOCK (Semáforo Individual) */}
                   <td className="px-4 py-4 text-center">
+                    <div className="flex items-center justify-center gap-1.5 whitespace-nowrap">
                     <span className={`inline-block w-12 py-1 rounded ${getStockColorClass(row.stock)}`}>
                       {row.stock}
                     </span>
+
+                    {/* El Badge de Tránsito: Solo aparece si transit > 0 */}
+                      {row.transit > 0 && (
+                        <span 
+                          title="Unidades en camino (Tránsito)"
+                          className="inline-flex items-center justify-center px-1.5 py-0.5 text-[10px] font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-full cursor-help"
+                        >
+                          +{row.transit} 🚚
+                        </span>
+                      )}
+                    </div>
                   </td>
                   
                   {/* VENTAS */}

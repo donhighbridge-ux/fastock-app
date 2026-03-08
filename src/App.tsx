@@ -251,33 +251,23 @@ function App() {
   // Suscripción al Diccionario
   
   useEffect(() => {
-    let unsubscribeFallback: (() => void) | undefined;
-    const dictRef = collection(db, "organizations", ORGANIZATION_ID, "product_dictionary");
+    const dictRef = collection(db, "product_dictionary");
     
     const unsubscribe = onSnapshot(dictRef, (snapshot) => {
       const dict: Record<string, string> = {};
       snapshot.forEach((doc) => {
         const d = doc.data();
-        if (d.sku && d.friendlyName) dict[d.sku.toLowerCase().trim()] = d.friendlyName;
+        const skuKey = (d.sku || doc.id).toLowerCase().trim();
+        
+        if (skuKey && d.friendlyName) {
+          dict[skuKey] = d.friendlyName;
+        }
       });
+      console.log("📘 Diccionario cargado con", Object.keys(dict).length, "productos"); // Verificador rápido
       setProductDictionary(dict);
-    }, (error) => {
-      console.warn("⚠️ Diccionario de organización no accesible, intentando ruta raíz...", error);
-      const fallbackRef = collection(db, "product_dictionary");
-      unsubscribeFallback = onSnapshot(fallbackRef, (snapshot) => {
-        const dict: Record<string, string> = {};
-        snapshot.forEach((doc) => {
-          const d = doc.data();
-          if (d.sku && d.friendlyName) dict[d.sku.toLowerCase().trim()] = d.friendlyName;
-        });
-        setProductDictionary(dict);
-      });
     });
 
-    return () => {
-      unsubscribe();
-      if (unsubscribeFallback) unsubscribeFallback();
-    };
+    return () => unsubscribe();
   }, []);
 
   const checkForTrackingUpdates = (newData: NormalizedRow[]) => {
@@ -448,6 +438,8 @@ function App() {
     currentSearchTerm,        // Lo que el usuario escribe en la barra (string)
     currentFilters.tienda === ALL_STORES_ID // ¿Estamos viendo todas las tiendas? (true/false)
   );
+
+  console.log("🕵️ AUDITORÍA DE DICCIONARIO:", productDictionary);
 
   if (isLoading) {
     return (
