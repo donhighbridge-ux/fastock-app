@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useCart, type CartItem } from '../context/useCart'; // Ajusta la ruta si es necesario
 import type { NormalizedRow } from '../types'; // Ajusta la ruta a tus tipos
 
-export const useMagicSweep = (data: NormalizedRow[], currentStore: string | null, isGlobalView: boolean) => {
+export const useMagicSweep = (data: NormalizedRow[], currentStore: string | null, isGlobalView: boolean, productDictionary: Record<string, string>) => {
   const { addToRequest } = useCart();
   const [sweepFeedback, setSweepFeedback] = useState<string | null>(null);
 
@@ -56,7 +56,7 @@ export const useMagicSweep = (data: NormalizedRow[], currentStore: string | null
             sku: baseSku,
             sizes: [size],
             area: row.area || 'General',
-            description: row.description,
+            description: productDictionary[baseSku.toLowerCase()] ||row.description,
             timestamp: Date.now(),
             originStore: row.tiendaNombre,
             requestType: 'stock'

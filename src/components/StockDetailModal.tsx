@@ -96,10 +96,15 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
   // --- HANDLERS DE ACCIÓN (Individuales por fila) ---
   
   const handleAddTracking = (rowSku: string, size: string) => {
-    if (isReadOnlyMode) return;
+    // 1. Extraemos el SKU base (Le quitamos el _M, _S, etc. al final)
+    const baseSku = rowSku.split('_').slice(0, -1).join('_'); 
+
+    // 2. Enviamos el nuevo formato a la tubería
     addToTracking({
-      sku: rowSku, // ✅ Ahora usamos el SKU específico (ej: 0000_GP00_M) en lugar del grupo
-      description: `${productTitle} (Talla ${size})`,
+      sku: baseSku,                   // ✅ El motor espera el SKU limpio (ej: 0000_GP00)
+      sizes: [size],                  // ✅ El motor espera un arreglo de tallas
+      area: 'General',                // ✅ Requisito de la interfaz (cámbialo si tienes el área real)
+      description: productTitle,      // ✅ Ya no hace falta poner "(Talla M)" en el título
       timestamp: getTimestamp(), 
       originStore: currentStoreName!
     });

@@ -15,6 +15,8 @@ export interface CartItem {
 export interface TrackingItem {
   sku: string;
   description: string;
+  sizes: string[];
+  area: string;
   timestamp: number;
   originStore?: string;
 }

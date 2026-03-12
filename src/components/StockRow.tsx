@@ -7,7 +7,7 @@ interface StockRowProps {
   onOpenModal: (group: GroupedProduct) => void;
   onSalesClick: (group: GroupedProduct) => void;
   onComparativeClick: (e: React.MouseEvent, group: GroupedProduct) => void;
-  onSubstituteClick: (group: GroupedProduct) => void; // ✅ NUEVA LÍNEA
+  globalSales?: number;
 }
 
 const StockRow: React.FC<StockRowProps> = ({ 
@@ -16,7 +16,7 @@ const StockRow: React.FC<StockRowProps> = ({
   onOpenModal, 
   onSalesClick, 
   onComparativeClick,
-  onSubstituteClick // ✅ NUEVO 
+  globalSales = 0
 }) => {
 
   // Helper de color encapsulado (o importado si lo sacas a utils)
@@ -67,30 +67,34 @@ const StockRow: React.FC<StockRowProps> = ({
             >
              {product.health.emoji} {product.health.status}
             </button>
-          
-          {/* BOTÓN TÁCTICO: Solo aparece si está incompleto Y tiene ventas */}
-            {product.health.status !== 'COMPLETO' && product.sales2w > 0 && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSubstituteClick(product);
-                }}
-                title="Buscar sustituto de exhibición"
-                className="p-1.5 bg-indigo-50 text-indigo-600 rounded-full hover:bg-indigo-100 hover:text-indigo-800 transition-colors border border-indigo-200 shadow-sm"
-              >
-                🔄
-              </button>
-            )}
           </div>
         )}
       </td>
 
-      {/* 5. VENTAS */}
-      <td 
-        onClick={() => onSalesClick(product)}
-        className="px-3 py-4 whitespace-nowrap text-center text-sm text-gray-600 cursor-pointer hover:bg-gray-100 hover:text-blue-600 rounded"
-      >
-        {product.sales2w}
+      {/* VENTAS (Con Radar de Joya Oculta) */}
+      <td className="px-3 py-4 whitespace-nowrap text-center text-sm font-medium">
+        <div className="flex items-center justify-center gap-1.5">
+          <span 
+            onClick={(e) => {
+              e.stopPropagation();
+              onSalesClick(product);
+            }}
+            className={`cursor-pointer hover:underline transition-all ${product.sales2w === 0 ? "text-gray-400 hover:text-gray-600" : "text-blue-600 hover:text-blue-800"}`}
+            title="Ver métricas de venta"
+          >
+            {product.sales2w}
+          </span>
+          
+          {/* 🟢 EL RADAR: Aparece si hay 0 ventas locales, stock completo, y ventas globales > 0 */}
+          {product.sales2w === 0 && globalSales > 0 && product.health.status === 'COMPLETO' && (
+            <span 
+              title={`Sin venta local, pero éxito en otras tiendas (${globalSales} uds. vendidas a nivel global). Ideal para reemplazo.`}
+              className="cursor-help transition-transform hover:scale-125 inline-block text-base"
+            >
+              💎
+            </span>
+          )}
+        </div>
       </td>
     </tr>
   );

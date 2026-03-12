@@ -4,7 +4,6 @@ import StockDetailModal from './StockDetailModal';
 import SimpleMetricModal from './SimpleMetricModal';
 import StockRow from './StockRow';
 import PaginationControls from './PaginationControls';
-import SubstitutionModal from './SubstitutionModal'; // ✅ NUEVO
 import { generateComparativeData } from '../utils/comparativeHelpers';
 
 interface StockTableProps {
@@ -51,11 +50,6 @@ const StockTable: React.FC<StockTableProps> = ({
     isAggregatedView?: boolean;
     aggregatedData?: AggregatedStoreData[];
   } | null>(null);
-
-  const [subModalState, setSubModalState] = useState<{
-    isOpen: boolean;
-    targetProduct: GroupedProduct | null;
-  }>({ isOpen: false, targetProduct: null }); // ✅ NUEVO
 
   // --- LÓGICA DE VISUALIZACIÓN (Paginación) ---
   const totalPages = Math.ceil(products.length / itemsPerPage);
@@ -147,7 +141,20 @@ const StockTable: React.FC<StockTableProps> = ({
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {currentRows.map((group) => (
+            {currentRows.map((group) => {
+              // 🟢 EL RADAR: Si el producto no vende nada aquí, miramos cómo le va en el resto del país
+              const globalSales = group.sales2w === 0 
+                ? rawData
+                    .filter(r => r.sku.toLowerCase().startsWith(group.baseSku))
+                    .reduce((sum, r) => sum + (Number(r.sales2w) || 0), 0)
+                : 0;
+
+              // 🟢 LA SONDA DE RAYOS X
+              if (group.sales2w === 0 && globalSales > 0) {
+                 console.log(`🔎 Joya Detectada: ${group.baseSku} | Ventas Globales: ${globalSales} | Estado local: ${group.health.status}`);
+              }
+
+              return (
               <StockRow
                 key={isMultiStore ? `${group.baseSku}-${group.storeName}` : group.baseSku}
                 product={group}
@@ -155,9 +162,10 @@ const StockTable: React.FC<StockTableProps> = ({
                 onOpenModal={handleOpenModal}
                 onSalesClick={handleSalesClick}
                 onComparativeClick={handleComparativeClick}
-                onSubstituteClick={(product) => setSubModalState({ isOpen: true, targetProduct: product })}
+                globalSales={globalSales} // 🟢 NUEVO: Pasamos el dato del radar a la fila
               />
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -185,15 +193,6 @@ const StockTable: React.FC<StockTableProps> = ({
           {...metricModal} // ✅ Esto ya incluye isOpen, title, sku, data, etc.
         />
       )}
-      
-      {/* 🟢 NUEVO: MODAL DE SUSTITUCIÓN TÁCTICA */}
-      <SubstitutionModal
-        isOpen={subModalState.isOpen}
-        onClose={() => setSubModalState({ isOpen: false, targetProduct: null })}
-        targetProduct={subModalState.targetProduct}
-        localGroupedProducts={products}
-        rawAllData={rawData}
-      />
     </div>
   );
 };

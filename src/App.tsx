@@ -13,7 +13,6 @@ import NotificationBell from './components/NotificationBell';
 import './App.css';
 import { uploadStockBatch } from './services/firebaseStockService';
 import { uploadDictionaryBatch } from './services/dictionaryService';
-import { useStockGrouping } from './hooks/useStockGrouping';
 
 const ORGANIZATION_ID = "demo_org_v1";
 const ALL_STORES_OPTION = "Todas las Tiendas";
@@ -428,17 +427,6 @@ function App() {
     setSearchTermInput('');
   };
 
-  // =========================================================================
-  // 4. PIPELINE DE TRANSFORMACIÓN (Data Cruda -> Data Inteligente)
-  // =========================================================================
-  // Este hook hace la magia: Agrupa por SKU padre, suma stocks y calcula semáforos.
-  const groupedProducts = useStockGrouping(
-    data,                     // Data cruda de Firebase (NormalizedRow)
-    productDictionary,        // Tu diccionario de nombres (estado productDictionary)
-    currentSearchTerm,        // Lo que el usuario escribe en la barra (string)
-    currentFilters.tienda === ALL_STORES_ID // ¿Estamos viendo todas las tiendas? (true/false)
-  );
-
   console.log("🕵️ AUDITORÍA DE DICCIONARIO:", productDictionary);
 
   if (isLoading) {
@@ -578,13 +566,11 @@ function App() {
                   </span>
                 )}
               </h2>
+
               {/* INYECCIÓN DE CONTEXTO */}
               <TrackingListView 
-                currentData={groupedProducts} // <--- CORRECCIÓN: Pasamos la data procesada
+                data={data} // <--- CORRECCIÓN: Pasamos la data procesada
                 currentStore={currentFilters.tienda || ''} // <--- CORRECCIÓN: Evitamos que pase null
-                sizeMap={sizeMap}
-                onToggleStar={() => {}} // Props temporales necesarios
-                starredSkus={new Set()} // Props temporales necesarios
               />
             </div>
           )}

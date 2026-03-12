@@ -49,7 +49,23 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const addToTracking = (item: TrackingItem) => {
     setTrackingList((prev) => {
-      if (prev.some((i) => i.sku === item.sku && i.originStore === item.originStore)) return prev;
+      const existingIndex = prev.findIndex(
+        (i) => i.sku === item.sku && i.originStore === item.originStore
+      );
+
+      // Si ya existía, fusionamos las tallas nuevas con las viejas
+      if (existingIndex >= 0) {
+        const updated = [...prev];
+        const existingItem = updated[existingIndex];
+        const mergedSizes = Array.from(new Set([...existingItem.sizes, ...item.sizes]));
+
+        updated[existingIndex] = { 
+          ...existingItem, 
+          sizes: mergedSizes, 
+          timestamp: Date.now() 
+        };
+        return updated;
+      }
       return [...prev, item];
     });
   };
