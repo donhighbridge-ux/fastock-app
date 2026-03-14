@@ -64,37 +64,54 @@ export const uploadStockBatch = async (data: NormalizedRow[], organizationId: st
   Logger.log(`🚀 Iniciando carga de STOCK: ${data.length} registros. (Sello temporal: ${currentSyncStamp})`);
   const chunks = chunkArray(data, BATCH_SIZE);
   await processStockUpload(chunks, organizationId, 0, currentSyncStamp);
-  await simulateGhostPurge(organizationId, currentSyncStamp);
+  await purgeGhostRecords(organizationId, currentSyncStamp);
   await verifyTotalCount(organizationId, data.length);
 };
 
-// --- EL EXORCISTA (SIMULACRO) ---
-async function simulateGhostPurge(organizationId: string, validStamp: number) {
-  Logger.log("👻 Iniciando búsqueda de productos fantasma (SIMULACRO)...");
+// --- EL EXORCISTA (BORRADO DEFINITIVO) ---
+async function purgeGhostRecords(organizationId: string, validStamp: number) {
+  Logger.log("👻 Iniciando búsqueda y eliminación de productos fantasma...");
   try {
     const coll = collection(db, `organizations/${organizationId}/stock`);
     const snapshot = await getDocs(coll);
 
-    let ghostsCount = 0;
+    // 1. Recolección: Metemos las referencias a borrar en una "bolsa de basura"
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const ghostsToDelete: any[] = [];
 
     snapshot.forEach((documento) => {
       const data = documento.data();
-      
       if (!data.syncStamp || data.syncStamp < validStamp) {
-        ghostsCount++;
-        
-        if (ghostsCount <= 10) {
-          console.warn(`🗑️ [SIMULACRO] Se borraría el zombi: ${data.sku} de la tienda ${data.tiendaNombre}`);
-        }
+        ghostsToDelete.push(documento.ref);
       }
     });
 
-    if (ghostsCount > 10) {
-      console.warn(`... y ${ghostsCount - 10} zombis más ocultos.`);
+    if (ghostsToDelete.length === 0) {
+      Logger.log("✨ Base de datos limpia. No se encontraron fantasmas.");
+      return;
     }
 
-    Logger.log(`🧹 SIMULACRO COMPLETADO: Se detectaron ${ghostsCount} productos listos para ser purgados en el futuro.`);
+    Logger.log(`🗑️ Se encontraron ${ghostsToDelete.length} fantasmas. Iniciando purga en bloques...`);
+
+    // 2. Empaquetado: Dividimos en bloques usando tu propia herramienta chunkArray
+    const chunks = chunkArray(ghostsToDelete, BATCH_SIZE);
+
+    // 3. Destrucción Secuencial
+    for (let i = 0; i < chunks.length; i++) {
+      const chunk = chunks[i];
+      const deleteBatch = writeBatch(db);
+      
+      chunk.forEach((docRef) => {
+        deleteBatch.delete(docRef);
+      });
+      
+      await commitWithRetry(deleteBatch);
+      Logger.log(`🧹 Purga: Bloque ${i + 1}/${chunks.length} eliminado.`);
+    }
+
+    Logger.log(`✅ EXORCISMO COMPLETADO: ${ghostsToDelete.length} productos eliminados definitivamente.`);
   } catch (error) {
-    Logger.error(`❌ Error en la búsqueda de fantasmas: ${error}`);
+    Logger.error(`❌ Error durante el exorcismo: ${error}`);
   }
 }
+
