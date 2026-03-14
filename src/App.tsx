@@ -551,7 +551,8 @@ function App() {
               {/* INYECCIÓN DE CONTEXTO */}
               <RequestCartView 
                 data={data} 
-                currentStore={currentFilters.tienda} 
+                currentStore={currentFilters.tienda}
+                productDictionary={productDictionary} 
               />
             </div>
           )}

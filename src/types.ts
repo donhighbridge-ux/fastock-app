@@ -15,6 +15,7 @@ export interface NormalizedRow {
   // Contexto de Ubicación
   tiendaId: string;     // Obligatorio. Sin ID no hay trazabilidad.
   tiendaNombre: string;
+  syncStamp?: number;
 
   // Métricas de Negocio (El Núcleo Numérico)
   // Todo debe ser numérico. Nada de strings, nada de nulls.

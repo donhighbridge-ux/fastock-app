@@ -7,9 +7,10 @@ import type { NormalizedRow } from '../types';
 interface RequestCartViewProps {
   data: NormalizedRow[];
   currentStore: string | null;
+  productDictionary: Record<string, string>;
 }
 
-const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore }) => {
+const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, productDictionary }) => {
   // 1. Extraemos solo lo que la vista necesita del Carrito
   const { requestList, removeFromRequest, clearRequest } = useCart();
 
@@ -17,7 +18,7 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore })
   const isGlobalView = !currentStore || currentStore === 'all' || currentStore === 'Todas las Tiendas';
 
   // 3. ENCHUFAMOS EL MOTOR MÁGICO
-  const { handleMagicSweep, sweepFeedback } = useMagicSweep(data, currentStore, isGlobalView);
+  const { handleMagicSweep, sweepFeedback } = useMagicSweep(data, currentStore, isGlobalView, productDictionary);
 
   // 4. Filtros de la vista
   const filteredList = isGlobalView
