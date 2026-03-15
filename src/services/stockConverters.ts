@@ -23,7 +23,9 @@ export const stockConverter: FirestoreDataConverter<NormalizedRow> = {
       transit: Number(modelObject.transit || 0),
       stock_cd: Number(modelObject.stock_cd || 0),
       sales2w: Number(modelObject.sales2w || 0),
-      ra: Number(modelObject.ra || 0)
+      ra: Number(modelObject.ra || 0),
+
+      syncStamp: modelObject.syncStamp || null
     };
   },
   fromFirestore: (snapshot, options) => {
