@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 
 interface SimpleMetricModalProps {
@@ -24,14 +24,6 @@ const SimpleMetricModal: React.FC<SimpleMetricModalProps> = ({
 }) => {
   const [view, setView] = useState<'list' | 'detail'>('list');
   const [selectedStoreData, setSelectedStoreData] = useState<{ store: string; sizes: { size: string; value: number }[]; feedbackMessage?: string } | null>(null);
-
-  // Reset view when modal opens/closes
-  useEffect(() => {
-    if (!isOpen) {
-      setView('list');
-      setSelectedStoreData(null);
-    }
-  }, [isOpen]);
 
   if (!isOpen) return null;
 

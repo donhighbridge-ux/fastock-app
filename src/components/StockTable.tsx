@@ -5,10 +5,12 @@ import SimpleMetricModal from './SimpleMetricModal';
 import StockRow from './StockRow';
 import PaginationControls from './PaginationControls';
 import { generateComparativeData } from '../utils/comparativeHelpers';
+import { useGlobalSalesMap } from '../hooks/useGlobalSalesMap';
 
 interface StockTableProps {
   products: GroupedProduct[]; 
-  rawData: NormalizedRow[];   
+  rawData: NormalizedRow[];
+  rawNationalData: NormalizedRow[];   
   isMultiStore?: boolean;
   currentStoreName?: string;
   sizeMap: Record<string, string>;
@@ -16,7 +18,8 @@ interface StockTableProps {
 
 const StockTable: React.FC<StockTableProps> = ({ 
   products = [], 
-  rawData = [], 
+  rawData = [],
+  rawNationalData = [], 
   isMultiStore = false, 
   currentStoreName, 
   sizeMap 
@@ -25,6 +28,8 @@ const StockTable: React.FC<StockTableProps> = ({
   // --- ESTADOS DE UI ---
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
+
+  const globalSalesMap = useGlobalSalesMap(rawNationalData, isMultiStore);
   
   const [modalState, setModalState] = useState<{
     isOpen: boolean;
@@ -124,6 +129,14 @@ const StockTable: React.FC<StockTableProps> = ({
     return <div className="p-8 text-center text-gray-500">No se encontraron productos.</div>;
   }
 
+  // 🩺 RADIOGRAFÍA DEL BYPASS
+  console.log("🛠️ DIAGNÓSTICO BYPASS:", {
+    "1. Filas Nacionales (El Cable)": rawNationalData.length,
+    "2. Tamaño Diccionario (El Motor)": Object.keys(globalSalesMap).length,
+    "3. MultiStore Activado (El Candado)": isMultiStore,
+    "4. Muestra del Diccionario": Object.keys(globalSalesMap).slice(0, 3)
+  });
+
   // --- RENDERIZADO FINAL ---
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 flex flex-col h-full">
@@ -142,18 +155,10 @@ const StockTable: React.FC<StockTableProps> = ({
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {currentRows.map((group) => {
-              // 🟢 EL RADAR: Si el producto no vende nada aquí, miramos cómo le va en el resto del país
-              const globalSales = group.sales2w === 0 
-                ? rawData
-                    .filter(r => r.sku.toLowerCase().startsWith(group.baseSku))
-                    .reduce((sum, r) => sum + (Number(r.sales2w) || 0), 0)
-                : 0;
 
-              // 🟢 LA SONDA DE RAYOS X
-              if (group.sales2w === 0 && globalSales > 0) {
-                 console.log(`🔎 Joya Detectada: ${group.baseSku} | Ventas Globales: ${globalSales} | Estado local: ${group.health.status}`);
-              }
-
+const safeQuery = String(group.baseSku).toUpperCase();
+const globalSales = group.sales2w === 0 ? (globalSalesMap[safeQuery] || 0) : 0;
+            
               return (
               <StockRow
                 key={isMultiStore ? `${group.baseSku}-${group.storeName}` : group.baseSku}

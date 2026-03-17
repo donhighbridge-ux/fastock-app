@@ -5,6 +5,7 @@ import type { NormalizedRow } from '../types';
 
 interface StockDashboardProps {
   data: NormalizedRow[];
+  rawNationalData: NormalizedRow[];
   productDictionary: Record<string, string>;
   isMultiStore: boolean;
   searchTerm: string;
@@ -14,7 +15,8 @@ interface StockDashboardProps {
 }
 
 export const StockDashboard: React.FC<StockDashboardProps> = ({ 
-  data, 
+  data,
+  rawNationalData, 
   productDictionary,
   isMultiStore, 
   searchTerm,
@@ -63,6 +65,7 @@ export const StockDashboard: React.FC<StockDashboardProps> = ({
     <StockTable 
       products={processedProducts} 
       rawData={data} 
+      rawNationalData={rawNationalData}
       isMultiStore={isMultiStore}
       sizeMap={sizeMap}
       currentStoreName={currentStoreName}

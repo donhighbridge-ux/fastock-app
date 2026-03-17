@@ -512,7 +512,8 @@ function App() {
                   />
                   <div className="min-h-[500px] transition-all duration-300">
                     <StockDashboard 
-                      data={filteredData} 
+                      data={filteredData}
+                      rawNationalData={data} 
                       productDictionary={productDictionary} 
                       isMultiStore={currentFilters.tienda === ALL_STORES_ID}
                       searchTerm={currentSearchTerm}
