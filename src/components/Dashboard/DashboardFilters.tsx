@@ -2,10 +2,11 @@ import React from 'react';
 
 // Definimos estrictamente el "Contrato" de los filtros
 export interface FilterState {
-  area: string | null;
-  categoria: string | null;
+  area: string | null; // Tier 1
+  categoria: string | null; // Tier 1
   health: string | 'all'; // Tier 2
   sort: string | 'none';  // Tier 3
+  size: string | 'all'; // Tier 4
 }
 
 interface DashboardFiltersProps {
@@ -15,6 +16,7 @@ interface DashboardFiltersProps {
   onFilterChange: (newFilters: FilterState) => void;
   areas: string[];
   categories: string[];
+  availableSizes: string[];
 }
 
 const DashboardFilters: React.FC<DashboardFiltersProps> = ({ 
@@ -23,7 +25,8 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({
   filters,
   onFilterChange,
   areas,
-  categories
+  categories,
+  availableSizes
 }) => {
   
   return (
@@ -58,7 +61,8 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({
             onChange={(e) => onFilterChange({ 
               ...filters, // 🛡️ Persistencia: Mantenemos el resto intacto
               area: e.target.value || null, 
-              categoria: null // Solo reseteamos la categoría hija
+              categoria: null,
+              size: 'all' // Reseteamos talla al cambiar área para evitar inconsistencias
             })}
           >
             <option value="">Todas las Áreas</option>
@@ -74,7 +78,7 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({
           <select
             className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white cursor-pointer disabled:bg-gray-100 disabled:cursor-not-allowed transition-colors"
             value={filters.categoria || ''}
-            onChange={(e) => onFilterChange({ ...filters, categoria: e.target.value || null })}
+            onChange={(e) => onFilterChange({ ...filters, categoria: e.target.value || null, size: 'all' })}
             disabled={!filters.area}
           >
             <option value="">Todas las Categorías</option>
@@ -100,8 +104,10 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({
         </div>
       </div>
 
-      {/* 🚀 FILA INFERIOR: Tier 3 (Ordenamiento) solitario a la izquierda */}
+      {/* 🚀 FILA INFERIOR: Tier 3 (Ordenamiento) y Tier 4 (Tallas) */}
       <div className="flex flex-col lg:flex-row gap-4 items-end pt-2 border-t border-gray-100">
+        
+        {/* TIER 3: Ordenamiento */}
         <div className="w-full lg:w-64">
           <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider flex items-center gap-2">
             <span>⚡ Ordenar Por</span>
@@ -122,6 +128,24 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({
             </optgroup>
           </select>
         </div>
+
+        {/* 🟢 TIER 4: Selector de Tallas Inteligente */}
+        <div className="w-full lg:w-48">
+          <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider flex items-center gap-2">
+            <span>📏 Talla Específica</span>
+          </label>
+          <select
+            className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium cursor-pointer hover:border-blue-400 transition-colors"
+            value={filters.size || 'all'}
+            onChange={(e) => onFilterChange({ ...filters, size: e.target.value })}
+          >
+            <option value="all">Todas las Tallas</option>
+            {availableSizes.map(size => (
+              <option key={size} value={size}>{size}</option>
+            ))}
+          </select>
+        </div>
+
       </div>
 
     </div>

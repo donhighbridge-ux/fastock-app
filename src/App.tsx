@@ -144,7 +144,8 @@ function App() {
     categoria: string | null;
     health: string;
     sort: string;
-  }>({ marca: null, tienda: null, area: null, categoria: null, health: 'all', sort: 'none'});
+    size: string | 'all';
+  }>({ marca: null, tienda: null, area: null, categoria: null, health: 'all', sort: 'none', size: 'all'});
   
   const [isDashboardActive, setIsDashboardActive] = useState(false);
   const [currentSearchTerm, setCurrentSearchTerm] = useState('');
@@ -427,6 +428,63 @@ function App() {
     setSearchTermInput('');
   };
 
+// ------------------------------------------------------------------
+  // 🟢 MOTOR DE TALLAS INTELIGENTE V2.0 (Filtro Tier 4)
+  // Incluye: Normalización por Área y Ordenamiento de Retail
+  // ------------------------------------------------------------------
+  const availableSizes = useMemo(() => {
+    const sizes = new Set<string>();
+    
+    // 🛠️ HERRAMIENTA 1: El Normalizador (Quita el "/ 6" solo en MENS/WOMENS)
+    const normalizeSize = (rawSize: string, area: string) => {
+      if (!rawSize) return rawSize;
+      const upperArea = area?.toUpperCase() || '';
+      if (upperArea === 'MENS' || upperArea === 'WOMENS') {
+        return rawSize.split('/')[0].trim(); // Corta en el '/' y quita espacios
+      }
+      return rawSize; // En BOYS o GIRLS devuelve la talla intacta
+    };
+
+    // 🛠️ HERRAMIENTA 2: El Comparador Jerárquico de Letras
+    const SIZE_WEIGHTS: Record<string, number> = {
+      'XXS': 1, 'XS': 2, 'S': 3, 'M': 4, 'L': 5, 'XL': 6, 'XXL': 7
+    };
+
+    filteredData.forEach(row => {
+      if (row.sku) {
+        const parts = row.sku.split('_');
+        const sizeCode = parts[parts.length - 1]; 
+        
+        let friendlySize = sizeMap[sizeCode] || sizeCode; 
+        
+        // 🚀 FASE A: Aplicamos la regla del área antes de guardar
+        friendlySize = normalizeSize(friendlySize, row.area);
+        
+        if ((Number(row.stock) || 0) > 0) {
+          sizes.add(friendlySize);
+        }
+      }
+    });
+
+   // 🚀 FASE B: Ordenamos usando el peso de la industria (Con Rayos X)
+    return Array.from(sizes).sort((a, b) => {
+      // Función de Rayos X: Corta el string en el primer espacio, slash, o guion 
+      // para encontrar la letra base (Ej: "S / 6" -> "S", "XS(4)" -> "XS")
+      const getBaseLetter = (sizeStr: string) => (sizeStr.match(/^[a-zA-Z]+/) || [sizeStr])[0].toUpperCase();
+      
+      const weightA = SIZE_WEIGHTS[getBaseLetter(a)];
+      const weightB = SIZE_WEIGHTS[getBaseLetter(b)];
+
+      if (weightA && weightB) return weightA - weightB; // Ambas tienen letras base conocidas
+      if (weightA) return -1; // Las letras van primero que los números puros
+      if (weightB) return 1;
+
+      // Si son números puros (ej: "4", "6", "10/12", "34x34")
+      return a.localeCompare(b, undefined, { numeric: true }); 
+    });
+  }, [filteredData, sizeMap]);
+  // ------------------------------------------------------------------
+
   console.log("🕵️ AUDITORÍA DE DICCIONARIO:", productDictionary);
 
   if (isLoading) {
@@ -509,6 +567,7 @@ function App() {
                     onFilterChange={(newFilters) => setCurrentFilters(prev => ({ ...prev, ...newFilters }))} 
                     areas={availableOptions.areas}
                     categories={availableOptions.categories}
+                    availableSizes={availableSizes}
                   />
                   <div className="min-h-[500px] transition-all duration-300">
                     <StockDashboard 

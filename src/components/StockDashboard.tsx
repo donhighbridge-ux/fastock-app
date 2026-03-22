@@ -9,7 +9,7 @@ interface StockDashboardProps {
   productDictionary: Record<string, string>;
   isMultiStore: boolean;
   searchTerm: string;
-  filters: { health: string; sort: string };
+  filters: { health: string; sort: string; size: string | 'all' };
   sizeMap: Record<string, string>; // Se necesita pasar a la tabla para el Modal
   currentStoreName?: string;
 }
@@ -31,6 +31,45 @@ export const StockDashboard: React.FC<StockDashboardProps> = ({
   // 2. EL FILTRO: Aplicamos la lógica de semáforo aquí (antes estaba en la tabla)
   const processedProducts = useMemo(() => {
     let result = groupedData;
+
+// ------------------------------------------------------------------
+    // 🟢 NUEVO TIER 4: Intercepción por Referencia Cruzada (Tallas)
+    // Buscamos en la data cruda para no perder las tallas del Modal
+    // ------------------------------------------------------------------
+    if (filters?.size && filters.size !== 'all') {
+      const validSkus = new Set<string>();
+      
+      // 🛠️ HERRAMIENTA 1: El Normalizador (Idéntico al de App.tsx)
+      const normalizeSize = (rawSize: string, area: string) => {
+        if (!rawSize) return rawSize;
+        const upperArea = area?.toUpperCase() || '';
+        if (upperArea === 'MENS' || upperArea === 'WOMENS') {
+          return rawSize.split('/')[0].trim(); // Corta en el '/' y quita espacios
+        }
+        return rawSize;
+      };
+
+      data.forEach(row => {
+        if (row.sku) {
+          const parts = row.sku.split('_');
+          const sizeCode = parts[parts.length - 1]; // Extraemos la talla técnica
+          let friendlySize = sizeMap[sizeCode] || sizeCode; // Traducimos al aire
+          
+          // 🚀 APLICAMOS LA NORMALIZACIÓN ANTES DE COMPARAR
+          friendlySize = normalizeSize(friendlySize, row.area);
+          
+          // Si el producto coincide con la talla que busca el cliente y tiene stock real:
+          if (friendlySize === filters.size && (Number(row.stock) || 0) > 0) {
+            // Reconstruimos la llave de su modelo base y lo metemos a la Lista VIP
+            const baseSku = parts.length >= 2 ? parts.slice(0, 2).join('_').toLowerCase() : row.sku.toLowerCase();
+            validSkus.add(baseSku);
+          }
+        }
+      });
+
+      // Purgamos la tabla: Solo sobreviven los modelos que están en la Lista VIP
+      result = result.filter(item => validSkus.has(item.baseSku));
+    }
 
       // Filtro de Salud (Semáforo Nuevo)
       if (filters?.health && filters.health !== 'all') {
@@ -58,7 +97,7 @@ export const StockDashboard: React.FC<StockDashboardProps> = ({
   }
  
     return result;  
-  }, [groupedData, filters.health, filters.sort]);
+  }, [groupedData, filters.health, filters.sort, filters.size, sizeMap, data]);
 
   // 3. RENDERIZAMOS LA TABLA (Pasamos 'products' procesados y 'rawData' para los modales)
   return (
