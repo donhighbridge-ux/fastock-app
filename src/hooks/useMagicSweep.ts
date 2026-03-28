@@ -15,54 +15,88 @@ export const useMagicSweep = (data: NormalizedRow[], currentStore: string | null
     let itemsAdded = 0;
     const sweepDrafts = new Map<string, CartItem>();
 
-    // 2. El Barrido
+    // ------------------------------------------------------------------
+    // 🟢 PASADA 1: EL RADAR ESTRATÉGICO (Mapeo de Modelos para Punto 1)
+    // ------------------------------------------------------------------
+    const modelRadar = new Map<string, {
+      totalStock: number;
+      totalSales: number;
+      cdSizesAvailable: Set<string>;
+    }>();
+
+    targetData.forEach(row => {
+      const parts = row.sku.split('_');
+      const baseSkuLower = (parts.length >= 2 ? parts.slice(0, 2).join('_') : row.sku).toLowerCase();
+      const size = parts.length > 2 ? parts.slice(2).join('_') : 'Única';
+      
+      const stock = Number(row.stock) || 0;
+      const sales = Number(row.sales2w) || 0; 
+      const cd = Number(row.stock_cd) || 0;
+
+      if (!modelRadar.has(baseSkuLower)) {
+        modelRadar.set(baseSkuLower, { totalStock: 0, totalSales: 0, cdSizesAvailable: new Set() });
+      }
+
+      const radar = modelRadar.get(baseSkuLower)!;
+      radar.totalStock += stock;
+      radar.totalSales += sales;
+      if (cd > 0) {
+        radar.cdSizesAvailable.add(size); 
+      }
+    });
+
+    // ------------------------------------------------------------------
+    // 🟢 PASADA 2: EL BARRIDO TÁCTICO (Con regla original)
+    // ------------------------------------------------------------------
     targetData.forEach(row => {
       const stock = Number(row.stock) || 0;
       const cd = Number(row.stock_cd) || 0;
       const transit = Number(row.transit) || 0;
       const valorRA = row.ra;
 
-      // Detector de productos No Asignados
+      // Detector original de productos No Asignados
       const isNotAssigned = 
         valorRA === '' || 
         valorRA === null || 
         valorRA === undefined || 
         valorRA === 'N/A' || 
         valorRA === 'NaN' || 
-        Number.isNaN(Number(valorRA)) ||
-        Number(valorRA) <= 0; // 🛑 EL ESCUDO ANTI-CEROS
+        Number(valorRA) <= 0;
 
-      // La Regla de Oro Blindada
+      const parts = row.sku.split('_');
+      const baseSku = parts.length >= 2 ? parts.slice(0, 2).join('_') : row.sku;
+      const baseSkuLower = baseSku.toLowerCase();
+      const size = parts.length > 2 ? parts.slice(2).join('_') : 'Única';
+
+      const radar = modelRadar.get(baseSkuLower);
+      
+      // 🛡️ PROTECCIÓN PUNTO 1: Evitar el "Saldo Inexhibible" (Curva Rota)
+      if (radar && radar.totalStock === 0 && radar.totalSales === 0 && radar.cdSizesAvailable.size <= 1) {
+        return; // Abortamos, no lo pedimos.
+      }
+
+      // 🛡️ REGLA CLÁSICA: Tu lógica original intacta
       if (stock < 2 && cd > 0 && transit === 0 && !isNotAssigned) {
         
-        // ✂️ EL BISTURÍ UNIFICADO (Idéntico a useStockGroupings)
-        const parts = row.sku.split('_');
-        
-        // 1. Aislamos el SKU + COLOR estrictamente (los 2 primeros elementos)
-        const baseSku = parts.length >= 2 ? parts.slice(0, 2).join('_') : row.sku;
-        
-        // 2. Aislamos la TALLA (todo lo que viene del tercer elemento en adelante)
-        const size = parts.length > 2 ? parts.slice(2).join('_') : 'Única';
-
-        // 📦 LA LLAVE DE AGRUPACIÓN CORRECTA
         const draftKey = `${baseSku}-${row.tiendaNombre}`;
 
         if (sweepDrafts.has(draftKey)) {
-          // Si la caja ya existe, solo inyectamos la talla
-          sweepDrafts.get(draftKey)!.sizes.push(size);
+          const draft = sweepDrafts.get(draftKey)!;
+          if (!draft.sizes.includes(size)) {
+             draft.sizes.push(size);
+          }
         } else {
-          // Si no existe, creamos la caja base
           sweepDrafts.set(draftKey, {
             sku: baseSku,
             sizes: [size],
             area: row.area || 'General',
-            description: productDictionary[baseSku.toLowerCase()] ||row.description,
+            description: productDictionary[baseSkuLower] || row.description,
             timestamp: Date.now(),
             originStore: row.tiendaNombre,
             requestType: 'stock'
           });
         }
-        itemsAdded++;
+        itemsAdded++; 
       }
     });
 

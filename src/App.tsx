@@ -8,6 +8,7 @@ import DashboardFilters from './components/Dashboard/DashboardFilters';
 import { StockDashboard } from './components/StockDashboard';
 import RequestCartView from './components/RequestCartView';
 import { TrackingListView } from './components/TrackingListView';
+import SettingsView from './components/SettingsView';
 import type { NormalizedRow } from './types';
 import NotificationBell from './components/NotificationBell';
 import './App.css';
@@ -126,6 +127,18 @@ const Sidebar = ({ currentView, setCurrentView, currentStore }: { currentView: '
           </>
         )}
       </nav>
+
+          {/* 🟢 NUEVO: BOTÓN DE CONFIGURACIÓN (Esquina inferior izquierda) */}
+          <div className="p-4 border-t border-gray-200 mt-auto">
+            <button
+              onClick={() => setCurrentView('settings')}
+              className={`w-full text-left px-4 py-3 rounded-lg flex items-center gap-3 transition-colors ${
+                currentView === 'settings' ? 'bg-gray-800 text-white font-bold' : 'text-gray-600 hover:bg-gray-100 font-medium'
+              }`}
+            >
+              <span>⚙️</span> Configuración
+            </button>
+          </div>
     </aside>
   );
 };
@@ -633,6 +646,13 @@ function App() {
                 data={data} // <--- CORRECCIÓN: Pasamos la data procesada
                 currentStore={currentFilters.tienda || ''} // <--- CORRECCIÓN: Evitamos que pase null
               />
+            </div>
+          )}
+
+          {/* 🟢 NUEVO: RENDERIZADO DEL CENTRO DE COMANDO */}
+          {currentView === 'settings' && (
+            <div className="max-w-7xl mx-auto mt-4 h-full">
+               <SettingsView data={data} />
             </div>
           )}
         </div>

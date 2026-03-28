@@ -109,10 +109,23 @@ export const useStockGrouping = (
       return { ...group, health };
     });
 
-    // Filtro Opcional Multi-tienda
-    if (searchTerm && isMultiStore) {
-        result = result.filter((group) => group.stock > 0 || group.transit > 0);
-    }
+    // ------------------------------------------------------------------
+    // 🟢 EL FRANCOTIRADOR (Purga de Ceros Absolutos)
+    // Elimina productos "fantasma" que no aportan valor operativo.
+    // ------------------------------------------------------------------
+    result = result.filter((group) => {
+      // 🛡️ Regla de Supervivencia:
+      // Si el producto tiene CERO en todo, es un fantasma. Lo eliminamos.
+      const isGhost = group.stock === 0 && group.transit === 0 && group.sales2w === 0 && group.ra === 0;
+      
+      // Si el usuario está buscando algo específico en Multi-Tienda (Bypass original)
+      if (searchTerm && isMultiStore) {
+        return group.stock > 0 || group.transit > 0;
+      }
+
+      // Devolvemos solo a los que NO son fantasmas
+      return !isGhost;
+    });
 
     return result as GroupedProduct[];
   }, [data, productDictionary, searchTerm, isMultiStore]);
