@@ -22,6 +22,8 @@ export const useMagicSweep = (data: NormalizedRow[], currentStore: string | null
       totalStock: number;
       totalSales: number;
       cdSizesAvailable: Set<string>;
+      activeRaCount: number;   // 🟢 NUEVO: Cuántas tallas tienen RA >= 1
+      storeSizesCount: number; // 🟢 NUEVO: Cuántas tallas existen en total
     }>();
 
     targetData.forEach(row => {
@@ -34,14 +36,26 @@ export const useMagicSweep = (data: NormalizedRow[], currentStore: string | null
       const cd = Number(row.stock_cd) || 0;
 
       if (!modelRadar.has(baseSkuLower)) {
-        modelRadar.set(baseSkuLower, { totalStock: 0, totalSales: 0, cdSizesAvailable: new Set() });
+        modelRadar.set(baseSkuLower, { 
+          totalStock: 0, 
+          totalSales: 0, 
+          cdSizesAvailable: new Set(),
+          activeRaCount: 0,
+          storeSizesCount: 0
+        });
       }
-
       const radar = modelRadar.get(baseSkuLower)!;
       radar.totalStock += stock;
       radar.totalSales += sales;
       if (cd > 0) {
         radar.cdSizesAvailable.add(size); 
+      }
+
+      // 🟢 NUEVO: Contabilidad estricta para la regla del 50%
+      radar.storeSizesCount += 1; // Contamos una talla más para este modelo
+      const safeRaForRadar = Number(row.ra) || 0;
+      if (safeRaForRadar >= 1) {
+        radar.activeRaCount += 1; // Contamos si esta talla está viva
       }
     });
 
@@ -49,26 +63,31 @@ export const useMagicSweep = (data: NormalizedRow[], currentStore: string | null
     // 🟢 PASADA 2: EL BARRIDO TÁCTICO (Con regla original)
     // ------------------------------------------------------------------
     targetData.forEach(row => {
-      const stock = Number(row.stock) || 0;
-      const cd = Number(row.stock_cd) || 0;
-      const transit = Number(row.transit) || 0;
-      const valorRA = row.ra;
-
-      // Detector original de productos No Asignados
-      const isNotAssigned = 
-        valorRA === '' || 
-        valorRA === null || 
-        valorRA === undefined || 
-        valorRA === 'N/A' || 
-        valorRA === 'NaN' || 
-        Number(valorRA) <= 0;
-
       const parts = row.sku.split('_');
       const baseSku = parts.length >= 2 ? parts.slice(0, 2).join('_') : row.sku;
       const baseSkuLower = baseSku.toLowerCase();
       const size = parts.length > 2 ? parts.slice(2).join('_') : 'Única';
 
+      const stock = Number(row.stock) || 0;
+      const cd = Number(row.stock_cd) || 0;
+      const transit = Number(row.transit) || 0;
+
+      // 🛡️ SANITIZACIÓN ABSOLUTA: Destruye cualquier formato fantasma
+      // 🛡️ SANITIZACIÓN ABSOLUTA: Destruye cualquier formato fantasma
+      const rawRa = Number(row.ra);
+      const safeRa = isNaN(rawRa) ? 0 : rawRa;
+      
       const radar = modelRadar.get(baseSkuLower);
+
+      // 🛡️ REGLA DE RECUPERACIÓN DE CURVA (Filtro 50%):
+      // ¿El modelo tiene al menos la mitad de sus tallas encendidas?
+      const isRadarValid = radar ? (radar.activeRaCount / radar.storeSizesCount) >= 0.5 : false;
+
+      // Le damos el indulto SOLO si la RA es 0, el CD tiene stock, y la masa crítica (>= 50%) está viva.
+      const isTallaApagada = safeRa <= 0 && isRadarValid && cd > 0;
+
+      // La talla es rechazada si tiene RA 0 y NO cumple con el indulto del 50%.
+      const isNotAssigned = safeRa <= 0 && !isTallaApagada;
       
       // 🛡️ PROTECCIÓN PUNTO 1: Evitar el "Saldo Inexhibible" (Curva Rota)
       if (radar && radar.totalStock === 0 && radar.totalSales === 0 && radar.cdSizesAvailable.size <= 1) {

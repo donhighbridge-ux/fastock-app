@@ -70,7 +70,7 @@ export const CartProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     });
   };
 
-  const removeFromRequest = (sku: string, originStore?: string, requestType: 'stock' | 'ra' = 'stock') => {
+  const removeFromRequest = (sku: string, originStore?: string, requestType: 'stock' | 'ra' | 'opportunity' = 'stock' ) => {
     setRequestList((prev) => prev.filter((item) => {
       const matchSku = item.sku === sku;
       const matchStore = originStore ? item.originStore === originStore : true;

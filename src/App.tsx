@@ -68,7 +68,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ step, options, onSelect, 
   );
 };
 
-const Sidebar = ({ currentView, setCurrentView, currentStore }: { currentView: 'dashboard' | 'upload' | 'cart' | 'tracking', setCurrentView: (t: 'dashboard' | 'upload' | 'cart' | 'tracking') => void, currentStore: string | null }) => {
+const Sidebar = ({ currentView, setCurrentView, currentStore }: { currentView: 'dashboard' | 'upload' | 'cart' | 'tracking' | 'settings', setCurrentView: (t: 'dashboard' | 'upload' | 'cart' | 'tracking' | 'settings') => void, currentStore: string | null }) => {
   const { requestList, trackingList } = useCart();
   const isStoreSelected = currentStore && currentStore !== ALL_STORES_ID;
 
@@ -148,7 +148,7 @@ function App() {
   const [filteredData, setFilteredData] = useState<NormalizedRow[]>(data);
   const [isLoading, setIsLoading] = useState(true);
   const [productDictionary, setProductDictionary] = useState<Record<string, string>>({});
-  const [currentView, setCurrentView] = useState<'dashboard' | 'upload' | 'cart' | 'tracking'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'upload' | 'cart' | 'tracking' | 'settings'>('dashboard');
   const [sizeMap, setSizeMap] = useState<Record<string, string>>({});
   const [currentFilters, setCurrentFilters] = useState<{
     marca: string | null;
@@ -652,7 +652,7 @@ function App() {
           {/* 🟢 NUEVO: RENDERIZADO DEL CENTRO DE COMANDO */}
           {currentView === 'settings' && (
             <div className="max-w-7xl mx-auto mt-4 h-full">
-               <SettingsView data={data} />
+               <SettingsView data={data} currentStore={currentFilters.tienda} />
             </div>
           )}
         </div>

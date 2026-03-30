@@ -5,9 +5,11 @@ import type { NormalizedRow } from '../types';
 
 interface SettingsViewProps {
   data: NormalizedRow[];
+  currentStore?: string | null;
 }
 
-const SettingsView: React.FC<SettingsViewProps> = ({ data }) => {
+const SettingsView: React.FC<SettingsViewProps> = ({ data, currentStore }) => {
+  const isStoreSelected = currentStore && currentStore !== 'all' && currentStore !== 'Todas las Tiendas';
   const [thresholds, setThresholds] = useState<Record<string, number | null>>({});
   const [expandedArea, setExpandedArea] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -88,6 +90,19 @@ const SettingsView: React.FC<SettingsViewProps> = ({ data }) => {
         </p>
       </div>
 
+      {/* 🛡️ CANDADO VISUAL: Mensaje de Advertencia */}
+      {!isStoreSelected && (
+        <div className="m-6 bg-amber-100 border-l-4 border-amber-500 text-amber-700 p-4 shadow-sm rounded-r-md">
+          <div className="flex items-center">
+            <span className="text-2xl mr-3">⚠️</span>
+            <div>
+              <p className="font-bold">Modo de Solo Lectura</p>
+              <p className="text-sm">Selecciona una tienda específica en el menú principal para poder editar las leyes.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ÁREA DE ACORDEONES (Scrollable) */}
       <div className="flex-1 overflow-y-auto p-6 space-y-4 pb-32">
         {Object.keys(hierarchy).sort().map(area => (
@@ -117,8 +132,8 @@ const SettingsView: React.FC<SettingsViewProps> = ({ data }) => {
                       <div className="flex items-center gap-3">
                         <button 
                           onClick={() => handleDecrease(key)}
-                          disabled={isNCA || val <= 1}
-                          className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-lg bg-gray-200 text-gray-600 hover:bg-gray-300 disabled:opacity-30 transition"
+                          disabled={!isStoreSelected || isNCA || val <= 1}
+                          className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-lg bg-gray-200 text-gray-600 hover:bg-gray-300 disabled:opacity-30 transition cursor-pointer"
                         >-</button>
                         
                         <div className={`w-12 text-center font-bold text-lg ${isNCA ? 'text-gray-400 text-sm' : 'text-purple-700'}`}>
@@ -127,13 +142,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({ data }) => {
                         
                         <button 
                           onClick={() => handleIncrease(key)}
-                          className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-lg bg-gray-200 text-gray-600 hover:bg-gray-300 transition"
+                          disabled={!isStoreSelected}
+                          className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-lg bg-gray-200 text-gray-600 hover:bg-gray-300 disabled:opacity-30 transition cursor-pointer"
                         >+</button>
 
                         <button 
                           onClick={() => handleClear(key)}
-                          disabled={isNCA}
-                          className="ml-2 text-red-400 hover:text-red-600 disabled:opacity-0 transition"
+                          disabled={!isStoreSelected || isNCA}
+                          className="ml-2 text-red-400 hover:text-red-600 disabled:opacity-0 transition cursor-pointer"
                           title="Restablecer a NCA"
                         >
                           🗑️
@@ -159,7 +175,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ data }) => {
         </div>
         <button
           onClick={handleSave}
-          disabled={isSaving}
+          disabled={!isStoreSelected || isSaving}
           className="bg-purple-700 hover:bg-purple-800 text-white font-bold py-3 px-8 rounded-lg shadow-md transition-colors flex items-center gap-2 disabled:opacity-50"
         >
           {isSaving ? 'Guardando...' : '💾 Guardar Leyes de RA'}

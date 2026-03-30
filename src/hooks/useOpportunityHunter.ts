@@ -17,76 +17,153 @@ export const useOpportunityHunter = (
       return;
     }
 
-    const nationalCurve = new Map<string, Set<string>>(); 
-    const cdCurve = new Map<string, Set<string>>(); 
-    const storeStock = new Map<string, number>(); 
-    const modelMetadata = new Map<string, { area: string, description: string }>();
+// --- NUEVAS ESTRUCTURAS DE MEMORIA ---
+    const skuCategory = new Map<string, string>(); 
+    const skuGlobalSizes = new Map<string, Set<string>>(); 
+    const cdSizes = new Map<string, Set<string>>(); 
+    const myStoreStock = new Map<string, { stock: number, transit: number }>();
+    const modelMetadata = new Map<string, { area: string, description: string, originalSku: string }>();
+    
+    // Memoria del Tribunal de Pares: baseSku -> storeName -> { raSizes, stockSizes, transitSizes }
+    type PeerStats = { raSizes: Set<string>, stockSizes: Set<string>, transitSizes: Set<string> };
+    const peerStores = new Map<string, Map<string, PeerStats>>();
 
-    // 🟢 PASADA 1: MAPEO GLOBAL
+    // ------------------------------------------------------------------
+    // 🟢 PASADA 1: MAPEO GLOBAL Y RECOLECCIÓN DE PRUEBAS
+    // ------------------------------------------------------------------
     data.forEach(row => {
       const parts = row.sku.split('_');
       const baseSkuOriginal = parts.length >= 2 ? parts.slice(0, 2).join('_') : row.sku;
       const baseSkuLower = baseSkuOriginal.toLowerCase();
       const size = parts.length > 2 ? parts.slice(2).join('_') : 'Única';
+      
+      const area = row.area?.trim().toUpperCase() || 'SIN AREA';
+      const cat = row.categoria?.trim().toUpperCase() || 'SIN CATEGORIA';
+      const categoryKey = `${area}_${cat}`;
 
-      if (!nationalCurve.has(baseSkuLower)) nationalCurve.set(baseSkuLower, new Set());
-      if (!cdCurve.has(baseSkuLower)) cdCurve.set(baseSkuLower, new Set());
-      if (!storeStock.has(baseSkuLower)) storeStock.set(baseSkuLower, 0);
+      if (!skuCategory.has(baseSkuLower)) skuCategory.set(baseSkuLower, categoryKey);
+      if (!skuGlobalSizes.has(baseSkuLower)) skuGlobalSizes.set(baseSkuLower, new Set());
+      if (!cdSizes.has(baseSkuLower)) cdSizes.set(baseSkuLower, new Set());
+      if (!myStoreStock.has(baseSkuLower)) myStoreStock.set(baseSkuLower, { stock: 0, transit: 0 });
+      if (!peerStores.has(baseSkuLower)) peerStores.set(baseSkuLower, new Map());
       if (!modelMetadata.has(baseSkuLower)) {
         modelMetadata.set(baseSkuLower, { 
           area: row.area || 'General', 
-          description: productDictionary[baseSkuLower] || row.description 
+          description: productDictionary[baseSkuLower] || row.description,
+          originalSku: baseSkuOriginal
         });
       }
 
-      nationalCurve.get(baseSkuLower)!.add(size);
+      skuGlobalSizes.get(baseSkuLower)!.add(size);
 
       if ((Number(row.stock_cd) || 0) > 0) {
-        cdCurve.get(baseSkuLower)!.add(size);
+        cdSizes.get(baseSkuLower)!.add(size);
       }
 
       if (row.tiendaNombre === currentStore || row.tiendaId === currentStore) {
-        const myStock = Number(row.stock) || 0;
-        const myTransit = Number(row.transit) || 0;
-        storeStock.set(baseSkuLower, storeStock.get(baseSkuLower)! + myStock + myTransit);
+        const stock = myStoreStock.get(baseSkuLower)!;
+        stock.stock += Number(row.stock) || 0;
+        stock.transit += Number(row.transit) || 0;
+      } else {
+        const storeName = row.tiendaNombre || row.tiendaId || 'Unknown';
+        const peersForSku = peerStores.get(baseSkuLower)!;
+        if (!peersForSku.has(storeName)) {
+          peersForSku.set(storeName, { raSizes: new Set(), stockSizes: new Set(), transitSizes: new Set() });
+        }
+        const stats = peersForSku.get(storeName)!;
+        
+        const safeRa = (row.ra === 'N/A' || row.ra === '' || row.ra == null || row.ra === 'NaN') ? 0 : Number(row.ra) || 0;
+        
+        if (safeRa >= 1) stats.raSizes.add(size);
+        if ((Number(row.stock) || 0) >= 1) stats.stockSizes.add(size);
+        if ((Number(row.transit) || 0) >= 1) stats.transitSizes.add(size);
       }
     });
 
-    // 🟢 PASADA 2: LA CACERÍA (Evaluación Matemática del 80%)
+    // ------------------------------------------------------------------
+    // 🟢 PASADA 1.5: INTELIGENCIA DE ENJAMBRE (Regla 2: Baseline Dinámico)
+    // ------------------------------------------------------------------
+    const categoryBaselines = new Map<string, number>();
+    const categorySizeCounts = new Map<string, number[]>();
+    
+    skuGlobalSizes.forEach((sizes, baseSkuLower) => {
+      const cat = skuCategory.get(baseSkuLower)!;
+      if (!categorySizeCounts.has(cat)) categorySizeCounts.set(cat, []);
+      categorySizeCounts.get(cat)!.push(sizes.size);
+    });
+
+    categorySizeCounts.forEach((counts, cat) => {
+      const frequency: Record<number, number> = {};
+      let maxFreq = 0;
+      let mode = 0;
+      counts.forEach(c => {
+        frequency[c] = (frequency[c] || 0) + 1;
+        if (frequency[c] > maxFreq) {
+          maxFreq = frequency[c];
+          mode = c;
+        }
+      });
+      categoryBaselines.set(cat, mode || 1); 
+    });
+
+    // ------------------------------------------------------------------
+    // 🟢 PASADA 2: LA CACERÍA Y EL TRIBUNAL
+    // ------------------------------------------------------------------
     let itemsAdded = 0;
-    const processedSkus = new Set<string>();
 
-    data.forEach(row => {
-      const parts = row.sku.split('_');
-      const baseSkuOriginal = parts.length >= 2 ? parts.slice(0, 2).join('_') : row.sku;
-      const baseSkuLower = baseSkuOriginal.toLowerCase();
+    skuGlobalSizes.forEach((_, baseSkuLower) => {
+      // 🛡️ FILTRO 1: Tienda en cero absoluto
+      const myStock = myStoreStock.get(baseSkuLower)!;
+      if (myStock.stock > 0 || myStock.transit > 0) return;
+
+      // 🛡️ FILTRO 2: Integridad del CD vs Inteligencia de Enjambre (Regla 2)
+      const cat = skuCategory.get(baseSkuLower)!;
+      const baseline = categoryBaselines.get(cat)!; 
+      const cdSizesAvailable = cdSizes.get(baseSkuLower)!; 
       
-      if (processedSkus.has(baseSkuLower)) return;
+      if (cdSizesAvailable.size === 0 || (cdSizesAvailable.size / baseline) < 0.8) return;
 
-      const myTotalStock = storeStock.get(baseSkuLower) || 0;
-      
-      if (myTotalStock === 0) {
-         const totalSizes = nationalCurve.get(baseSkuLower)!.size;
-         const cdSizesAvailable = cdCurve.get(baseSkuLower)!.size;
+      // 🛡️ FILTRO 3: Tribunal de las Tiendas Pares (Regla 1 Estricta)
+      let hasValidPeer = false;
+      const peers = peerStores.get(baseSkuLower)!;
 
-         if (totalSizes > 0 && (cdSizesAvailable / totalSizes) >= 0.8) {
-           const metadata = modelMetadata.get(baseSkuLower)!;
-           const sizesToRequest = Array.from(cdCurve.get(baseSkuLower)!); 
+      for (const stats of peers.values()) {
+        let hasAllRa = true;
+        let stockMatchCount = 0;
+        let transitMatchCount = 0;
 
-           // 📦 EMPAQUE AL CARRITO CON LA NUEVA ETIQUETA
-           addToRequest({
-             sku: baseSkuOriginal,
-             sizes: sizesToRequest,
-             area: metadata.area,
-             description: metadata.description,
-             timestamp: Date.now(),
-             originStore: currentStore,
-             requestType: 'opportunity' // 🟢 NUEVO: Etiqueta exclusiva
-           });
+        cdSizesAvailable.forEach(size => {
+          if (!stats.raSizes.has(size)) hasAllRa = false; 
+          if (stats.stockSizes.has(size)) stockMatchCount++; 
+          if (stats.transitSizes.has(size)) transitMatchCount++; 
+        });
 
-           itemsAdded++;
-           processedSkus.add(baseSkuLower);
-         }
+        if (hasAllRa) {
+          const stockRatio = stockMatchCount / cdSizesAvailable.size;
+          const hasFullTransit = transitMatchCount === cdSizesAvailable.size;
+
+          if (stockRatio >= 0.8 || hasFullTransit) {
+            hasValidPeer = true;
+            break; 
+          }
+        }
+      }
+
+      // 📦 EMPAQUETADO FINAL
+      if (hasValidPeer) {
+        const metadata = modelMetadata.get(baseSkuLower)!;
+        const sizesToRequest = Array.from(cdSizesAvailable);
+
+        addToRequest({
+          sku: metadata.originalSku.toUpperCase(),
+          sizes: sizesToRequest,
+          area: metadata.area,
+          description: metadata.description,
+          timestamp: Date.now(),
+          originStore: currentStore,
+          requestType: 'opportunity'
+        });
+        itemsAdded++;
       }
     });
 

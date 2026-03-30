@@ -2,6 +2,7 @@ import React from 'react';
 import { useCart, type CartItem } from '../context/useCart';
 import { useMagicSweep } from '../hooks/useMagicSweep'; // <-- IMPORTAMOS EL MOTOR
 import { useOpportunityHunter } from '../hooks/useOpportunityHunter';
+import { useAlertaRA } from '../hooks/useAlertaRA'; // 🟢 NUEVO MOTOR
 import { generarReporteStock, generarReporteRA, generarReporteOportunidades } from '../utils/excel';
 import type { NormalizedRow } from '../types';
 
@@ -23,6 +24,9 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, p
 
   // 🟢 3.5. ENCHUFAMOS EL MOTOR CAZADOR
   const { huntOpportunities, hunterFeedback } = useOpportunityHunter(data, currentStore, productDictionary);
+
+  // 🟢 3.6. ENCHUFAMOS EL MOTOR DE AUDITORÍA RA
+  const { scanRA, raFeedback, isScanningRA } = useAlertaRA(data, currentStore, productDictionary);
 
   // 4. Filtros de la vista
   const filteredList = isGlobalView
@@ -110,6 +114,15 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, p
             >
               🎯 Cazar Oportunidades
             </button>
+
+            {/* 🟢 NUEVO BOTÓN: AUDITORÍA RA */}
+            <button
+              onClick={scanRA}
+              disabled={isScanningRA}
+              className="bg-purple-800 hover:bg-purple-900 text-white font-bold py-2 px-4 rounded-lg shadow transition-colors flex items-center gap-2 disabled:opacity-50"
+            >
+              {isScanningRA ? '⏳ Auditando...' : '🟣 Auditar RA'}
+            </button>
           
             {/* NUEVO BOTÓN: EXPORTAR STOCK */}
             <button
@@ -140,15 +153,16 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, p
           </div>
           
           {/* Mensajes de feedback dinámicos */}
-          {(sweepFeedback || hunterFeedback) && (
+          {(sweepFeedback || hunterFeedback || raFeedback) && (
             <span 
               className={`text-sm font-medium mt-2 animate-pulse ${
                 sweepFeedback?.includes('Éxito') ? 'text-green-600' : 
                 hunterFeedback?.includes('Exitosa') ? 'text-teal-600' : 
+                raFeedback?.includes('Completa') ? 'text-purple-600' : 
                 'text-gray-500'
               }`}
             >
-              {sweepFeedback || hunterFeedback}
+              {sweepFeedback || hunterFeedback || raFeedback}
             </span>
           )}
         </div>
