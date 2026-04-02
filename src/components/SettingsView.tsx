@@ -31,7 +31,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ data, currentStore }) => {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const docRef = doc(db, 'config', 'ra_thresholds');
+        const docRef = doc(db, 'config', `ra_thresholds_${currentStore}`);
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           setThresholds(docSnap.data() as Record<string, number | null>);
@@ -67,7 +67,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ data, currentStore }) => {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      const docRef = doc(db, 'config', 'ra_thresholds');
+      const docRef = doc(db, 'config', `ra_thresholds_${currentStore}`);
       await setDoc(docRef, thresholds);
       setSaveMessage('✅ Leyes de RA guardadas con éxito en la nube.');
     } catch (error) {
