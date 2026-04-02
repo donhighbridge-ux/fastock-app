@@ -3,7 +3,8 @@ import { useCart, type CartItem } from '../context/useCart';
 import { useMagicSweep } from '../hooks/useMagicSweep'; // <-- IMPORTAMOS EL MOTOR
 import { useOpportunityHunter } from '../hooks/useOpportunityHunter';
 import { useAlertaRA } from '../hooks/useAlertaRA'; // 🟢 NUEVO MOTOR
-import { generarReporteStock, generarReporteRA, generarReporteOportunidades } from '../utils/excel';
+import { useUltimasTallas } from '../hooks/useUltimasTallas';
+import { generarReporteStock, generarReporteRA, generarReporteOportunidades, generarReporteUltimasTallas } from '../utils/excel';
 import type { NormalizedRow } from '../types';
 
 interface RequestCartViewProps {
@@ -27,6 +28,9 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, p
 
   // 🟢 3.6. ENCHUFAMOS EL MOTOR DE AUDITORÍA RA
   const { scanRA, raFeedback, isScanningRA } = useAlertaRA(data, currentStore, productDictionary);
+
+  // ⚫ 3.7. NUEVO MOTOR: ÚLTIMAS TALLAS
+  const { scanUltimasTallas, isScanningUltimas, ultimasFeedback } = useUltimasTallas(data, currentStore, productDictionary);
 
   // 4. Filtros de la vista
   const filteredList = isGlobalView
@@ -76,6 +80,13 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, p
     generarReporteOportunidades(opportunityItems, data, storeNameForExcel); // 🟢 AHORA USA SU PROPIO EXCEL
   };
 
+  // ⚫ NUEVO: Exportación a Excel - Últimas Tallas
+  const handleDownloadUltimas = () => {
+    const storeNameForExcel = currentStore && currentStore !== 'all' ? currentStore : 'Consolidado';
+    // Fíjate que le pasamos 'requestList', el nuevo motor se encarga de filtrar
+    generarReporteUltimasTallas(requestList, storeNameForExcel);
+  };
+
   return (
     <div className="space-y-8 mt-6">
       
@@ -123,6 +134,15 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, p
             >
               {isScanningRA ? '⏳ Auditando...' : '🟣 Auditar RA'}
             </button>
+
+            {/* ⚫ NUEVO BOTÓN: ÚLTIMAS TALLAS */}
+            <button
+              onClick={scanUltimasTallas}
+              disabled={isScanningUltimas}
+              className="bg-gray-800 hover:bg-gray-900 text-white font-bold py-2 px-4 rounded-lg shadow transition-colors flex items-center gap-2 disabled:opacity-50"
+            >
+              {isScanningUltimas ? '⏳ Escaneando...' : '⚫ Últimas Tallas'}
+            </button>
           
             {/* NUEVO BOTÓN: EXPORTAR STOCK */}
             <button
@@ -153,16 +173,17 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, p
           </div>
           
           {/* Mensajes de feedback dinámicos */}
-          {(sweepFeedback || hunterFeedback || raFeedback) && (
+          {(sweepFeedback || hunterFeedback || raFeedback || ultimasFeedback) && (
             <span 
               className={`text-sm font-medium mt-2 animate-pulse ${
                 sweepFeedback?.includes('Éxito') ? 'text-green-600' : 
                 hunterFeedback?.includes('Exitosa') ? 'text-teal-600' : 
-                raFeedback?.includes('Completa') ? 'text-purple-600' : 
+                raFeedback?.includes('Completa') ? 'text-purple-600' :
+                ultimasFeedback?.includes('Listo') ? 'text-gray-800' : 
                 'text-gray-500'
               }`}
             >
-              {sweepFeedback || hunterFeedback || raFeedback}
+              {sweepFeedback || hunterFeedback || raFeedback || ultimasFeedback}
             </span>
           )}
         </div>
@@ -184,6 +205,7 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, p
           const stockItems = items.filter(i => (i.requestType || 'stock') === 'stock');
           const raItems = items.filter(i => i.requestType === 'ra');
           const opportunityItems = items.filter(i => i.requestType === 'opportunity'); // 🟢 NUEVO
+          const ultimasItems = requestList.filter(item => item.requestType === 'ultimas');
 
           return (
             <div key={area} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -310,6 +332,54 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, p
                               <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <button
                                   onClick={() => removeFromRequest(item.sku, item.originStore, 'opportunity')}
+                                  className="text-red-500 hover:text-red-700 hover:underline"
+                                >
+                                  Eliminar
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* ⚫ SECCIÓN ÚLTIMAS TALLAS */}
+                {ultimasItems.length > 0 && (
+                  <div className="mb-8">
+                    <div className="flex justify-between items-center mb-3">
+                      <h4 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                        <span>⚫</span> Productos en Fin de Ciclo (Últimas Tallas)
+                      </h4>
+                      <button
+                        onClick={handleDownloadUltimas}
+                        className="bg-green-600 hover:bg-green-700 text-white text-sm font-bold py-1 px-3 rounded shadow transition-colors flex items-center gap-1"
+                      >
+                        📊 Exportar a Excel
+                      </button>
+                    </div>
+                    <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-200">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-800">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-100 uppercase tracking-wider">SKU Base</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-100 uppercase tracking-wider">Descripción</th>
+                            {isGlobalView && <th className="px-6 py-3 text-left text-xs font-medium text-gray-100 uppercase tracking-wider">Tienda</th>}
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-100 uppercase tracking-wider">Tallas Restantes en Piso</th>
+                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-100 uppercase tracking-wider">Acción</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {ultimasItems.map((item) => (
+                            <tr key={`${item.sku}-${item.originStore}-ultimas`} className="hover:bg-gray-50">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-mono font-medium text-gray-900">{item.sku}</td>
+                              <td className="px-6 py-4 text-sm text-gray-600 truncate max-w-xs">{item.description}</td>
+                              {isGlobalView && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.originStore}</td>}
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-800">{item.sizes.join(', ')}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <button
+                                  onClick={() => removeFromRequest(item.sku, item.originStore, 'ultimas')}
                                   className="text-red-500 hover:text-red-700 hover:underline"
                                 >
                                   Eliminar

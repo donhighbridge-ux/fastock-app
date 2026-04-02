@@ -8,7 +8,7 @@ export interface CartItem {
   description: string;
   timestamp: number;
   originStore?: string;
-  requestType?: 'stock' | 'ra' | 'opportunity';
+  requestType?: 'stock' | 'ra' | 'opportunity' | 'ultimas';
   proposedRaMap?: Record<string, number>; 
 }
 
@@ -26,7 +26,7 @@ export interface CartContextType {
   trackingList: TrackingItem[];
   addToRequest: (item: CartItem) => void;
   addToTracking: (item: TrackingItem) => void;
-  removeFromRequest: (sku: string, originStore?: string, requestType?: 'stock' | 'ra' | 'opportunity') => void;
+  removeFromRequest: (sku: string, originStore?: string, requestType?: 'stock' | 'ra' | 'opportunity' | 'ultimas') => void;
   removeFromTracking: (sku: string, originStore?: string) => void;
   clearRequest: (originStore?: string) => void;
 }
