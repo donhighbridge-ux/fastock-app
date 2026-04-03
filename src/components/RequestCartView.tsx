@@ -41,6 +41,7 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, p
   const hasStock = filteredList.some(item => (item.requestType || 'stock') === 'stock');
   const hasRA = filteredList.some(item => item.requestType === 'ra');
   const hasOpportunity = filteredList.some(item => item.requestType === 'opportunity'); // 🟢 NUEVO
+  const hasUltimas = filteredList.some(item => item.requestType === 'ultimas'); // ⚫ NUEVO VALIDADOR
 
   // Agrupar por Área
   const groupedItems = filteredList.reduce((acc, item) => {
@@ -83,8 +84,8 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, p
   // ⚫ NUEVO: Exportación a Excel - Últimas Tallas
   const handleDownloadUltimas = () => {
     const storeNameForExcel = currentStore && currentStore !== 'all' ? currentStore : 'Consolidado';
-    // Fíjate que le pasamos 'requestList', el nuevo motor se encarga de filtrar
-    generarReporteUltimasTallas(requestList, storeNameForExcel);
+    // Fíjate que le pasamos 'filteredList', el nuevo motor se encarga de filtrar
+    generarReporteUltimasTallas(filteredList, storeNameForExcel);
   };
 
   return (
@@ -171,6 +172,15 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, p
               🎯 Excel Oportunidades
             </button>
           </div>
+
+          {/* ⚫ NUEVO BOTÓN: EXCEL ÚLTIMAS TALLAS */}
+            <button
+              onClick={handleDownloadUltimas}
+              disabled={!hasUltimas}
+              className="bg-gray-800 hover:bg-gray-900 disabled:bg-gray-300 text-white font-bold py-2 px-4 rounded-lg shadow transition-colors flex items-center gap-2"
+            >
+              ⚫ Excel Últimas
+            </button>
           
           {/* Mensajes de feedback dinámicos */}
           {(sweepFeedback || hunterFeedback || raFeedback || ultimasFeedback) && (
@@ -205,7 +215,7 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, p
           const stockItems = items.filter(i => (i.requestType || 'stock') === 'stock');
           const raItems = items.filter(i => i.requestType === 'ra');
           const opportunityItems = items.filter(i => i.requestType === 'opportunity'); // 🟢 NUEVO
-          const ultimasItems = requestList.filter(item => item.requestType === 'ultimas');
+          const ultimasItems = items.filter(item => item.requestType === 'ultimas'); // 🟢 CORREGIDO: Usar 'items' local
 
           return (
             <div key={area} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -345,20 +355,12 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, p
                   </div>
                 )}
 
-                {/* ⚫ SECCIÓN ÚLTIMAS TALLAS */}
+                {/* ⚫ TABLA 4: SECCIÓN ÚLTIMAS TALLAS */}
                 {ultimasItems.length > 0 && (
                   <div className="mb-8">
-                    <div className="flex justify-between items-center mb-3">
-                      <h4 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                        <span>⚫</span> Productos en Fin de Ciclo (Últimas Tallas)
-                      </h4>
-                      <button
-                        onClick={handleDownloadUltimas}
-                        className="bg-green-600 hover:bg-green-700 text-white text-sm font-bold py-1 px-3 rounded shadow transition-colors flex items-center gap-1"
-                      >
-                        📊 Exportar a Excel
-                      </button>
-                    </div>
+                    <h4 className="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
+                      <span>⚫</span> Productos en Fin de Ciclo (Últimas Tallas)
+                    </h4>
                     <div className="bg-white rounded-lg shadow overflow-hidden border border-gray-200">
                       <table className="min-w-full divide-y divide-gray-200">
                         <thead className="bg-gray-800">

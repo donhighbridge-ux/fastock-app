@@ -5,6 +5,7 @@ export interface CartItem {
   sku: string;
   sizes: string[];
   area: string;
+  category: string; // 🟢 NUEVA PROPIEDAD
   description: string;
   timestamp: number;
   originStore?: string;

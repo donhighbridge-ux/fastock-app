@@ -36,6 +36,9 @@ export const useUltimasTallas = (
         area: string;
         description: string;
         sizesLeftOnFloor: string[]; // Guardamos qué tallas siguen físicamente en la tienda
+        totalSales2W: number; // 🟢 NUEVO
+        totalRa: number;      // 🟢 NUEVO
+        category: string;     // 🟢 NUEVO (para el punto 3)
       }>();
 
       targetData.forEach(row => {
@@ -49,6 +52,8 @@ export const useUltimasTallas = (
         const transit = Number(row.transit) || 0;
         const rawRa = Number(row.ra);
         const safeRa = isNaN(rawRa) ? 0 : rawRa;
+        const sales = Number(row.sales2w) || 0;
+        const raValue = safeRa;
 
         // 🛡️ REGLA ANTI-FANTASMAS: Si no tiene RA y no existe físicamente, no se cuenta.
         if (safeRa <= 0 && stock === 0 && cd === 0 && transit === 0) {
@@ -64,7 +69,10 @@ export const useUltimasTallas = (
             deadTransitSizes: 0,
             area: row.area || 'General',
             description: productDictionary[baseSkuLower] || row.description,
-            sizesLeftOnFloor: []
+            sizesLeftOnFloor: [],
+            totalSales2W: 0,
+            totalRa: 0,
+            category: row.categoria?.trim().toUpperCase() || 'SIN CATEGORÍA'
           });
         }
 
@@ -77,6 +85,9 @@ export const useUltimasTallas = (
         if (transit === 0) modelStats.deadTransitSizes += 1;
         
         if (stock > 0) modelStats.sizesLeftOnFloor.push(size);
+
+        modelStats.totalSales2W += sales; // Acumular venta
+        modelStats.totalRa += raValue;    // Acumular RA
       });
 
       // ------------------------------------------------------------------
@@ -100,10 +111,21 @@ export const useUltimasTallas = (
         const isTransitDead = transitDeadRatio >= 0.8; // El 80% de las tallas en tránsito están agotadas
 
         if (isCurrentSeason && isStoreDying && isCdDead && isTransitDead) {
+          
+          // 🛡️ REGLA DE IMPACTO COMERCIAL
+          const isTotallySoldOut = stats.sizesLeftOnFloor.length === 0;
+          const hasHighImpactVenta = stats.totalSales2W >= (stats.totalRa * 0.5);
+
+          // Si está agotado total PERO no vendió el 50% de su RA, lo ignoramos (es basura antigua)
+          if (isTotallySoldOut && !hasHighImpactVenta) {
+            return; 
+          }
+
           addToRequest({
             sku: baseSku,
-            sizes: stats.sizesLeftOnFloor.length > 0 ? stats.sizesLeftOnFloor : ['AGOTADO TOTAL'],
+            sizes: isTotallySoldOut ? ['AGOTADO TOTAL (Best Seller)'] : stats.sizesLeftOnFloor,
             area: stats.area,
+            category: stats.category, // 🟢 Pasamos la categoría al carrito
             description: stats.description,
             timestamp: Date.now(),
             originStore: currentStore,
