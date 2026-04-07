@@ -5,7 +5,9 @@ export interface CartItem {
   sku: string;
   sizes: string[];
   area: string;
-  category: string; // 🟢 NUEVA PROPIEDAD
+  category: string; // 🟢 Guarda la categoría
+  categoryHealth?: string[]; // 🟢 Guarda la Hit List y el diagnóstico
+  salesPulse?: number;       // 🟢 Guarda el total vendido en otras tiendas
   description: string;
   timestamp: number;
   originStore?: string;
@@ -18,6 +20,7 @@ export interface TrackingItem {
   description: string;
   sizes: string[];
   area: string;
+  category: string;
   timestamp: number;
   originStore?: string;
 }

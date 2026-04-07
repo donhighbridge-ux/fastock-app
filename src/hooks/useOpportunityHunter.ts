@@ -17,154 +17,130 @@ export const useOpportunityHunter = (
       return;
     }
 
-// --- NUEVAS ESTRUCTURAS DE MEMORIA ---
-    const skuCategory = new Map<string, string>(); 
-    const skuGlobalSizes = new Map<string, Set<string>>(); 
-    const cdSizes = new Map<string, Set<string>>(); 
-    const myStoreStock = new Map<string, { stock: number, transit: number }>();
-    const modelMetadata = new Map<string, { area: string, description: string, originalSku: string }>();
-    
-    // Memoria del Tribunal de Pares: baseSku -> storeName -> { raSizes, stockSizes, transitSizes }
-    type PeerStats = { raSizes: Set<string>, stockSizes: Set<string>, transitSizes: Set<string> };
-    const peerStores = new Map<string, Map<string, PeerStats>>();
+// ---------------------------------------------------------
+    // 🟢 FASE 1: RADIOGRAFÍA DEL MUEBLE ACTUAL (HIT LIST)
+    // ---------------------------------------------------------
+    const myStoreData = data.filter(row => row.tiendaNombre === currentStore);
+    const categoryStats = new Map<string, { totalModels: number, healthyModels: number, hitList: string[] }>();
+    const myStoreSkus = new Set<string>();
+    const myStoreModels = new Map<string, { category: string, totalSizes: Set<string>, coveredSizes: Set<string>, desc: string }>();
 
-    // ------------------------------------------------------------------
-    // 🟢 PASADA 1: MAPEO GLOBAL Y RECOLECCIÓN DE PRUEBAS
-    // ------------------------------------------------------------------
-    data.forEach(row => {
+    myStoreData.forEach(row => {
       const parts = row.sku.split('_');
-      const baseSkuOriginal = parts.length >= 2 ? parts.slice(0, 2).join('_') : row.sku;
-      const baseSkuLower = baseSkuOriginal.toLowerCase();
+      const baseSku = parts.length >= 2 ? parts.slice(0, 2).join('_') : row.sku;
+      const size = parts.length > 2 ? parts.slice(2).join('_') : 'Única';
+      const cat = row.categoria?.trim().toUpperCase() || 'SIN CATEGORÍA';
+
+      // Anotamos que este SKU YA nos pertenece
+      if (Number(row.ra) >= 1 || Number(row.stock) > 0) {
+        myStoreSkus.add(baseSku);
+      }
+
+      if (!myStoreModels.has(baseSku)) {
+        myStoreModels.set(baseSku, { category: cat, totalSizes: new Set(), coveredSizes: new Set(), desc: productDictionary[baseSku.toLowerCase()] || row.description || '' });
+      }
+      const model = myStoreModels.get(baseSku)!;
+      model.totalSizes.add(size);
+
+      if ((Number(row.stock) || 0) > 0 || (Number(row.transit) || 0) > 0 || (Number(row.stock_cd) || 0) > 0) {
+        model.coveredSizes.add(size);
+      }
+    });
+
+    myStoreModels.forEach((stats, baseSku) => {
+      if (!categoryStats.has(stats.category)) categoryStats.set(stats.category, { totalModels: 0, healthyModels: 0, hitList: [] });
+      const catStat = categoryStats.get(stats.category)!;
+      catStat.totalModels++;
+
+      const healthRatio = stats.coveredSizes.size / stats.totalSizes.size;
+      if (healthRatio >= 0.8) {
+        catStat.healthyModels++;
+      } else {
+        const pct = Math.round(healthRatio * 100);
+        catStat.hitList.push(`${baseSku} - ${pct}% (${stats.coveredSizes.size} de ${stats.totalSizes.size} tallas) - ${stats.desc}`);
+      }
+    });
+
+    // Ordenar Hit List descendente (Ej: 75% -> 50% -> 20%)
+    categoryStats.forEach(stat => stat.hitList.sort((a, b) => {
+      const pctA = parseInt(a.match(/- (\d+)%/)?.[1] || '0');
+      const pctB = parseInt(b.match(/- (\d+)%/)?.[1] || '0');
+      return pctB - pctA; 
+    }));
+
+    // ---------------------------------------------------------
+    // 🟢 FASE 2: CACERÍA DEL TOP 10 (Resto de la Cadena)
+    // ---------------------------------------------------------
+    const otherStoresData = data.filter(row => row.tiendaNombre !== currentStore);
+    const globalModels = new Map<string, { category: string, area: string, desc: string, totalSizes: Set<string>, cdSizesAvailable: Set<string>, totalSales: number, totalCdVolume: number }>();
+
+    otherStoresData.forEach(row => {
+      const parts = row.sku.split('_');
+      const baseSku = parts.length >= 2 ? parts.slice(0, 2).join('_') : row.sku;
       const size = parts.length > 2 ? parts.slice(2).join('_') : 'Única';
       
-      const area = row.area?.trim().toUpperCase() || 'SIN AREA';
-      const cat = row.categoria?.trim().toUpperCase() || 'SIN CATEGORIA';
-      const categoryKey = `${area}_${cat}`;
+      // Filtro 1: Si ya lo tenemos asignado, se ignora.
+      if (myStoreSkus.has(baseSku)) return;
 
-      if (!skuCategory.has(baseSkuLower)) skuCategory.set(baseSkuLower, categoryKey);
-      if (!skuGlobalSizes.has(baseSkuLower)) skuGlobalSizes.set(baseSkuLower, new Set());
-      if (!cdSizes.has(baseSkuLower)) cdSizes.set(baseSkuLower, new Set());
-      if (!myStoreStock.has(baseSkuLower)) myStoreStock.set(baseSkuLower, { stock: 0, transit: 0 });
-      if (!peerStores.has(baseSkuLower)) peerStores.set(baseSkuLower, new Map());
-      if (!modelMetadata.has(baseSkuLower)) {
-        modelMetadata.set(baseSkuLower, { 
-          area: row.area || 'General', 
-          description: productDictionary[baseSkuLower] || row.description,
-          originalSku: baseSkuOriginal
+      if (!globalModels.has(baseSku)) {
+        globalModels.set(baseSku, {
+          category: row.categoria?.trim().toUpperCase() || 'SIN CATEGORÍA',
+          area: row.area || 'General',
+          desc: productDictionary[baseSku.toLowerCase()] || row.description || '',
+          totalSizes: new Set(), cdSizesAvailable: new Set(), totalSales: 0, totalCdVolume: 0
         });
       }
-
-      skuGlobalSizes.get(baseSkuLower)!.add(size);
-
-      if ((Number(row.stock_cd) || 0) > 0) {
-        cdSizes.get(baseSkuLower)!.add(size);
-      }
-
-      if (row.tiendaNombre === currentStore || row.tiendaId === currentStore) {
-        const stock = myStoreStock.get(baseSkuLower)!;
-        stock.stock += Number(row.stock) || 0;
-        stock.transit += Number(row.transit) || 0;
-      } else {
-        const storeName = row.tiendaNombre || row.tiendaId || 'Unknown';
-        const peersForSku = peerStores.get(baseSkuLower)!;
-        if (!peersForSku.has(storeName)) {
-          peersForSku.set(storeName, { raSizes: new Set(), stockSizes: new Set(), transitSizes: new Set() });
-        }
-        const stats = peersForSku.get(storeName)!;
-        
-        const safeRa = (row.ra === 'N/A' || row.ra === '' || row.ra == null || row.ra === 'NaN') ? 0 : Number(row.ra) || 0;
-        
-        if (safeRa >= 1) stats.raSizes.add(size);
-        if ((Number(row.stock) || 0) >= 1) stats.stockSizes.add(size);
-        if ((Number(row.transit) || 0) >= 1) stats.transitSizes.add(size);
-      }
-    });
-
-    // ------------------------------------------------------------------
-    // 🟢 PASADA 1.5: INTELIGENCIA DE ENJAMBRE (Regla 2: Baseline Dinámico)
-    // ------------------------------------------------------------------
-    const categoryBaselines = new Map<string, number>();
-    const categorySizeCounts = new Map<string, number[]>();
-    
-    skuGlobalSizes.forEach((sizes, baseSkuLower) => {
-      const cat = skuCategory.get(baseSkuLower)!;
-      if (!categorySizeCounts.has(cat)) categorySizeCounts.set(cat, []);
-      categorySizeCounts.get(cat)!.push(sizes.size);
-    });
-
-    categorySizeCounts.forEach((counts, cat) => {
-      const frequency: Record<number, number> = {};
-      let maxFreq = 0;
-      let mode = 0;
-      counts.forEach(c => {
-        frequency[c] = (frequency[c] || 0) + 1;
-        if (frequency[c] > maxFreq) {
-          maxFreq = frequency[c];
-          mode = c;
-        }
-      });
-      categoryBaselines.set(cat, mode || 1); 
-    });
-
-    // ------------------------------------------------------------------
-    // 🟢 PASADA 2: LA CACERÍA Y EL TRIBUNAL
-    // ------------------------------------------------------------------
-    let itemsAdded = 0;
-
-    skuGlobalSizes.forEach((_, baseSkuLower) => {
-      // 🛡️ FILTRO 1: Tienda en cero absoluto
-      const myStock = myStoreStock.get(baseSkuLower)!;
-      if (myStock.stock > 0 || myStock.transit > 0) return;
-
-      // 🛡️ FILTRO 2: Integridad del CD vs Inteligencia de Enjambre (Regla 2)
-      const cat = skuCategory.get(baseSkuLower)!;
-      const baseline = categoryBaselines.get(cat)!; 
-      const cdSizesAvailable = cdSizes.get(baseSkuLower)!; 
       
-      if (cdSizesAvailable.size === 0 || (cdSizesAvailable.size / baseline) < 0.8) return;
+      const model = globalModels.get(baseSku)!;
+      model.totalSizes.add(size);
+      model.totalSales += (Number(row.sales2w) || 0);
 
-      // 🛡️ FILTRO 3: Tribunal de las Tiendas Pares (Regla 1 Estricta)
-      let hasValidPeer = false;
-      const peers = peerStores.get(baseSkuLower)!;
-
-      for (const stats of peers.values()) {
-        let hasAllRa = true;
-        let stockMatchCount = 0;
-        let transitMatchCount = 0;
-
-        cdSizesAvailable.forEach(size => {
-          if (!stats.raSizes.has(size)) hasAllRa = false; 
-          if (stats.stockSizes.has(size)) stockMatchCount++; 
-          if (stats.transitSizes.has(size)) transitMatchCount++; 
-        });
-
-        if (hasAllRa) {
-          const stockRatio = stockMatchCount / cdSizesAvailable.size;
-          const hasFullTransit = transitMatchCount === cdSizesAvailable.size;
-
-          if (stockRatio >= 0.8 || hasFullTransit) {
-            hasValidPeer = true;
-            break; 
-          }
-        }
+      const cdStock = Number(row.stock_cd) || 0;
+      if (cdStock >= 1) {
+        model.cdSizesAvailable.add(size);
+        model.totalCdVolume += cdStock;
       }
+    });
 
-      // 📦 EMPAQUETADO FINAL
-      if (hasValidPeer) {
-        const metadata = modelMetadata.get(baseSkuLower)!;
-        const sizesToRequest = Array.from(cdSizesAvailable);
+    let itemsAdded = 0;
+    type OpportunityCandidate = { baseSku: string, category: string, area: string, desc: string, totalSizes: Set<string>, cdSizesAvailable: Set<string>, totalSales: number, totalCdVolume: number };
+    const oppsByCategory = new Map<string, OpportunityCandidate[]>();
 
+    globalModels.forEach((stats, baseSku) => {
+      if (stats.totalSizes.size === 0) return;
+      // Filtro de Hierro: 80% en CD
+      if ((stats.cdSizesAvailable.size / stats.totalSizes.size) >= 0.8) {
+        if (!oppsByCategory.has(stats.category)) oppsByCategory.set(stats.category, []);
+        oppsByCategory.get(stats.category)!.push({ baseSku, ...stats });
+      }
+    });
+
+    oppsByCategory.forEach((opps, category) => {
+      // Orden: 1° Mejores Ventas, 2° Mayor Volumen CD (para rellenar)
+      opps.sort((a, b) => b.totalSales - a.totalSales || b.totalCdVolume - a.totalCdVolume);
+      
+      const top10 = opps.slice(0, 10);
+      const catContext = categoryStats.get(category);
+      const healthData = catContext ? [
+        `De ${catContext.totalModels} modelos asignados en esta categoría, solo ${catContext.healthyModels} operan sobre el 80% de su capacidad.`,
+        ...catContext.hitList
+      ] : ['Sin datos de exhibición previa.'];
+
+      top10.forEach(opp => {
         addToRequest({
-          sku: metadata.originalSku.toUpperCase(),
-          sizes: sizesToRequest,
-          area: metadata.area,
-          description: metadata.description,
+          sku: opp.baseSku,
+          sizes: Array.from(opp.cdSizesAvailable),
+          area: opp.area,
+          category: opp.category,
+          description: opp.desc,
           timestamp: Date.now(),
           originStore: currentStore,
-          requestType: 'opportunity'
+          requestType: 'opportunity',
+          categoryHealth: healthData, 
+          salesPulse: opp.totalSales  
         });
         itemsAdded++;
-      }
+      });
     });
 
     if (itemsAdded > 0) {

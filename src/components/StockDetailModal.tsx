@@ -103,8 +103,9 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
     addToTracking({
       sku: baseSku,                   // ✅ El motor espera el SKU limpio (ej: 0000_GP00)
       sizes: [size],                  // ✅ El motor espera un arreglo de tallas
-      area: 'General',                // ✅ Requisito de la interfaz (cámbialo si tienes el área real)
-      description: productTitle,      // ✅ Ya no hace falta poner "(Talla M)" en el título
+      area: variants[0]?.area || 'General',
+      category: variants[0]?.categoria?.trim().toUpperCase() || 'SIN CATEGORÍA',
+      description: productTitle,    // ✅ Ya no hace falta poner "(Talla M)" en el título
       timestamp: getTimestamp(), 
       originStore: currentStoreName!
     });
@@ -117,6 +118,7 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
       sku: groupSku,
       sizes: [size],
       area: variants[0]?.area || 'General',
+      category: variants[0]?.categoria?.trim().toUpperCase() || 'SIN CATEGORÍA',
       description: productTitle,
       timestamp: getTimestamp(),
       originStore: currentStoreName!,
@@ -156,6 +158,7 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
       sku: groupSku,
       sizes: [size],
       area: variants[0]?.area || 'General',
+      category: variants[0]?.categoria?.trim().toUpperCase() || 'SIN CATEGORÍA',
       description: productTitle,
       timestamp: getTimestamp(),
       originStore: currentStoreName!,
