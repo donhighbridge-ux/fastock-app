@@ -11,6 +11,7 @@ export interface NormalizedRow {
   marca: string;
   categoria: string;
   area: string;
+  temporada: string;
 
   // Contexto de Ubicación
   tiendaId: string;     // Obligatorio. Sin ID no hay trazabilidad.
@@ -74,6 +75,7 @@ export interface GroupedProduct {
   area: string;
   categoria: string;
   marca: string;
+  temporada: string;
 
   health: StockHealth;
 

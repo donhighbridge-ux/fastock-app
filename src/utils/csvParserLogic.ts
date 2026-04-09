@@ -53,6 +53,18 @@ const sanitizeStoreName = (name: string | null | undefined): string => {
   return name.trim().toUpperCase(); 
 };
 
+// ✅ INYECCIÓN: Saneador de Temporada (Quita -S y maneja huérfanos)
+const sanitizeTemporada = (temp: string | null | undefined): string => {
+  if (!temp || typeof temp !== 'string' || temp.trim() === '' || temp.trim().toUpperCase() === 'N/A') {
+    return 'Sin Temporada';
+  }
+  let cleaned = temp.trim().toUpperCase();
+  if (cleaned.endsWith('-S')) {
+    cleaned = cleaned.slice(0, -2); // Amputa el '-S' táctico
+  }
+  return cleaned;
+};
+
 // --- PARSER PRINCIPAL ---
 
 export const parseAndNormalizeCsv = (csvText: string): Promise<NormalizedRow[]> => {
@@ -129,6 +141,7 @@ export const parseAndNormalizeCsv = (csvText: string): Promise<NormalizedRow[]> 
           // Propiedades Constantes
           const idxArea = findIndex(STATIC_COLUMNS.area);
           const idxCategoria = findIndex(STATIC_COLUMNS.categoria);
+          const idxTemporada = findIndex(STATIC_COLUMNS.temporada);
           const idxMarca = findIndex(STATIC_COLUMNS.marca); // Usamos Temporada/Marca
 
           if (idxSku === -1) throw new Error("⛔ Estructura Inválida: No se encontró la columna 'SKU' en la Fila 3.");
@@ -155,6 +168,7 @@ export const parseAndNormalizeCsv = (csvText: string): Promise<NormalizedRow[]> 
             // Extracción de Constantes 
             const area = idxArea !== -1 ? row[idxArea]?.trim() : 'General';
             const categoria = idxCategoria !== -1 ? row[idxCategoria]?.trim() : 'General';
+            const temporada = idxTemporada !== -1 ? sanitizeTemporada(row[idxTemporada]) : 'Sin Temporada';
             const marca = idxMarca !== -1 ? row[idxMarca]?.trim() : 'General'; // Mapeo de Temporada
 
             // Generación de Filas Atómicas (Una por Tienda)
@@ -172,6 +186,7 @@ export const parseAndNormalizeCsv = (csvText: string): Promise<NormalizedRow[]> 
                 marca: marca,
                 categoria: categoria,
                 area: area,
+                temporada: temporada,
 
                 // Valores iniciales variables en 0
                 stock: 0, 

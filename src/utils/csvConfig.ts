@@ -25,6 +25,7 @@ export const STATIC_COLUMNS: Record<string, string[]> = {
   marca: ['Marca'],
   area: ['Área', 'Area'],
   categoria: ['Categoría', 'Categoria'],
+  temporada: ['Temporada'],
   description: ['Descripción', 'Descripcion'], 
   stock_cd: ['Stock CD'], // Global según VibeCoded 
 };

@@ -14,6 +14,7 @@ export const stockConverter: FirestoreDataConverter<NormalizedRow> = {
       marca: modelObject.marca,
       categoria: modelObject.categoria,
       area: modelObject.area,
+      temporada: modelObject.temporada,
       
       tiendaId: modelObject.tiendaId,
       tiendaNombre: modelObject.tiendaNombre,
