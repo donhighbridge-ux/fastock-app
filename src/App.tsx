@@ -645,7 +645,8 @@ function App() {
               <RequestCartView 
                 data={data} 
                 currentStore={currentFilters.tienda}
-                productDictionary={productDictionary} 
+                productDictionary={productDictionary}
+                currentSeason={currentSeason} 
               />
             </div>
           )}

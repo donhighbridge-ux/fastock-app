@@ -5,7 +5,8 @@ import type { NormalizedRow } from '../types';
 export const useOpportunityHunter = (
   data: NormalizedRow[], 
   currentStore: string | null, 
-  productDictionary: Record<string, string>
+  productDictionary: Record<string, string>,
+  currentSeason: string
 ) => {
   const { addToRequest } = useCart();
   const [hunterFeedback, setHunterFeedback] = useState<string | null>(null);
@@ -17,13 +18,26 @@ export const useOpportunityHunter = (
       return;
     }
 
+    // 🟢 HELPER: Viaje en el tiempo (Excepción A - Carryover)
+    const getCarryover = (season: string) => {
+      const match = season.match(/^([A-Z]+)(\d{4})$/);
+      if (!match) return 'N/A';
+      return `${match[1]}${parseInt(match[2]) - 1}`;
+    };
+    const carryoverSeason = getCarryover(currentSeason);
+
 // ---------------------------------------------------------
     // 🟢 FASE 1: RADIOGRAFÍA DEL MUEBLE ACTUAL (HIT LIST)
     // ---------------------------------------------------------
     const myStoreData = data.filter(row => row.tiendaNombre === currentStore);
     const categoryStats = new Map<string, { totalModels: number, healthyModels: number, hitList: string[] }>();
     const myStoreSkus = new Set<string>();
-    const myStoreModels = new Map<string, { category: string, totalSizes: Set<string>, coveredSizes: Set<string>, desc: string }>();
+
+// 🟢 NUEVO ECOSISTEMA: Sensores para cazar Fantasmas
+    const myStoreModels = new Map<string, { 
+      category: string, totalSizes: Set<string>, coveredSizes: Set<string>, desc: string,
+      totalStoreStock: number, totalTransit: number, cdAvailableSizes: Set<string>, season: string 
+    }>();
 
     myStoreData.forEach(row => {
       const parts = row.sku.split('_');
@@ -31,23 +45,44 @@ export const useOpportunityHunter = (
       const size = parts.length > 2 ? parts.slice(2).join('_') : 'Única';
       const cat = row.categoria?.trim().toUpperCase() || 'SIN CATEGORÍA';
 
-      // Anotamos que este SKU YA nos pertenece
       if (Number(row.ra) >= 1 || Number(row.stock) > 0) {
         myStoreSkus.add(baseSku);
       }
 
       if (!myStoreModels.has(baseSku)) {
-        myStoreModels.set(baseSku, { category: cat, totalSizes: new Set(), coveredSizes: new Set(), desc: productDictionary[baseSku.toLowerCase()] || row.description || '' });
+        myStoreModels.set(baseSku, { 
+          category: cat, totalSizes: new Set(), coveredSizes: new Set(), desc: productDictionary[baseSku.toLowerCase()] || row.description || '',
+          totalStoreStock: 0, totalTransit: 0, cdAvailableSizes: new Set(), season: row.temporada?.trim().toUpperCase() || 'SIN TEMPORADA'
+        });
       }
+      
       const model = myStoreModels.get(baseSku)!;
       model.totalSizes.add(size);
+      
+      const stock = Number(row.stock) || 0;
+      const transit = Number(row.transit) || 0;
+      const stockCd = Number(row.stock_cd) || 0;
 
-      if ((Number(row.stock) || 0) > 0 || (Number(row.transit) || 0) > 0 || (Number(row.stock_cd) || 0) > 0) {
+      model.totalStoreStock += stock;
+      model.totalTransit += transit;
+      if (stockCd >= 1) model.cdAvailableSizes.add(size);
+
+      if (stock > 0 || transit > 0 || stockCd > 0) {
         model.coveredSizes.add(size);
       }
     });
 
     myStoreModels.forEach((stats, baseSku) => {
+      // 👻 EL EXORCISMO: Filtro Anti-Fantasmas
+      const cdHealthRatio = stats.cdAvailableSizes.size / stats.totalSizes.size;
+      const isGhost = stats.totalStoreStock === 0 && 
+                      stats.totalTransit === 0 && 
+                      cdHealthRatio < 0.8 && 
+                      stats.season !== 'BÁSICO' && 
+                      stats.season !== currentSeason;
+      
+      if (isGhost) return; // Muere en silencio, no entra al reporte.
+
       if (!categoryStats.has(stats.category)) categoryStats.set(stats.category, { totalModels: 0, healthyModels: 0, hitList: [] });
       const catStat = categoryStats.get(stats.category)!;
       catStat.totalModels++;
@@ -61,7 +96,6 @@ export const useOpportunityHunter = (
       }
     });
 
-    // Ordenar Hit List descendente (Ej: 75% -> 50% -> 20%)
     categoryStats.forEach(stat => stat.hitList.sort((a, b) => {
       const pctA = parseInt(a.match(/- (\d+)%/)?.[1] || '0');
       const pctB = parseInt(b.match(/- (\d+)%/)?.[1] || '0');
@@ -72,7 +106,7 @@ export const useOpportunityHunter = (
     // 🟢 FASE 2: CACERÍA DEL TOP 10 (Resto de la Cadena)
     // ---------------------------------------------------------
     const otherStoresData = data.filter(row => row.tiendaNombre !== currentStore);
-    const globalModels = new Map<string, { category: string, area: string, desc: string, totalSizes: Set<string>, cdSizesAvailable: Set<string>, totalSales: number, totalCdVolume: number }>();
+    const globalModels = new Map<string, { category: string, area: string, desc: string, totalSizes: Set<string>, cdSizesAvailable: Set<string>, totalSales: number, totalCdVolume: number, season: string }>();
 
     otherStoresData.forEach(row => {
       const parts = row.sku.split('_');
@@ -87,7 +121,7 @@ export const useOpportunityHunter = (
           category: row.categoria?.trim().toUpperCase() || 'SIN CATEGORÍA',
           area: row.area || 'General',
           desc: productDictionary[baseSku.toLowerCase()] || row.description || '',
-          totalSizes: new Set(), cdSizesAvailable: new Set(), totalSales: 0, totalCdVolume: 0
+          totalSizes: new Set(), cdSizesAvailable: new Set(), totalSales: 0, totalCdVolume: 0, season: row.temporada?.trim().toUpperCase() || 'SIN TEMPORADA'
         });
       }
       
@@ -108,8 +142,12 @@ export const useOpportunityHunter = (
 
     globalModels.forEach((stats, baseSku) => {
       if (stats.totalSizes.size === 0) return;
-      // Filtro de Hierro: 80% en CD
-      if ((stats.cdSizesAvailable.size / stats.totalSizes.size) >= 0.8) {
+      
+      const cdHealthRatio = stats.cdSizesAvailable.size / stats.totalSizes.size;
+      const isValidSeason = stats.season === 'BÁSICO' || stats.season === currentSeason || stats.season === carryoverSeason;
+
+      // 🛡️ Filtro de Hierro Comercial (Salud CD y Temporada)
+      if (cdHealthRatio >= 0.8 && isValidSeason) {
         if (!oppsByCategory.has(stats.category)) oppsByCategory.set(stats.category, []);
         oppsByCategory.get(stats.category)!.push({ baseSku, ...stats });
       }
