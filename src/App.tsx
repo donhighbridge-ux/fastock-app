@@ -159,6 +159,26 @@ function App() {
     sort: string;
     size: string | 'all';
   }>({ marca: null, tienda: null, area: null, categoria: null, health: 'all', sort: 'none', size: 'all'});
+
+  // 🟢 INYECCIÓN FASE 2: Estado de Temporada y Motor de Auto-Detección
+  const [currentSeason, setCurrentSeason] = useState<string>('Detectando...');
+
+  useEffect(() => {
+    if (!data || data.length === 0) return;
+    const seasonSums: Record<string, number> = {};
+    data.forEach(row => {
+      const t = row.temporada?.trim().toUpperCase();
+      if (t && t !== 'BÁSICO' && t !== 'SIN TEMPORADA') {
+        seasonSums[t] = (seasonSums[t] || 0) + Number(row.stock_cd || 0);
+      }
+    });
+    // Ordenamos de mayor a menor y sacamos el ganador
+    const winner = Object.entries(seasonSums).sort((a, b) => b[1] - a[1])[0];
+    if (winner) {
+      setCurrentSeason(winner[0]);
+      console.log(`⏱️ Motor de Tiempo: Temporada ganadora detectada -> ${winner[0]} con ${winner[1]} unidades en CD`);
+    }
+  }, [data]);
   
   const [isDashboardActive, setIsDashboardActive] = useState(false);
   const [currentSearchTerm, setCurrentSearchTerm] = useState('');
@@ -652,7 +672,12 @@ function App() {
           {/* 🟢 NUEVO: RENDERIZADO DEL CENTRO DE COMANDO */}
           {currentView === 'settings' && (
             <div className="max-w-7xl mx-auto mt-4 h-full">
-               <SettingsView data={data} currentStore={currentFilters.tienda} />
+               <SettingsView 
+               data={data} 
+               currentStore={currentFilters.tienda}
+               currentSeason={currentSeason} 
+               setCurrentSeason={setCurrentSeason} 
+               />
             </div>
           )}
         </div>

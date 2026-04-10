@@ -6,14 +6,26 @@ import type { NormalizedRow } from '../types';
 interface SettingsViewProps {
   data: NormalizedRow[];
   currentStore?: string | null;
+  currentSeason: string;
+  setCurrentSeason: (s: string) => void;
 }
 
-const SettingsView: React.FC<SettingsViewProps> = ({ data, currentStore }) => {
+const SettingsView: React.FC<SettingsViewProps> = ({ data, currentStore, currentSeason, setCurrentSeason }) => {
   const isStoreSelected = currentStore && currentStore !== 'all' && currentStore !== 'Todas las Tiendas';
   const [thresholds, setThresholds] = useState<Record<string, number | null>>({});
   const [expandedArea, setExpandedArea] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+
+  // 🟢 INYECCIÓN FASE 2: Extraer temporadas únicas para el selector manual
+  const availableSeasons = useMemo(() => {
+    const unique = new Set<string>();
+    data.forEach(r => {
+      const t = r.temporada?.trim().toUpperCase();
+      if (t && t !== 'BÁSICO' && t !== 'SIN TEMPORADA') unique.add(t);
+    });
+    return Array.from(unique).sort();
+  }, [data]);
 
   // 🟢 MOTOR DINÁMICO: Extrae Áreas y Categorías reales del Excel
   const hierarchy = useMemo(() => {
@@ -41,7 +53,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ data, currentStore }) => {
       }
     };
     fetchSettings();
-  }, []);
+  }, [currentStore]);
 
   // 🟢 CONTROLES DEL STEPPER
   const handleIncrease = (key: string) => {
@@ -88,6 +100,33 @@ const SettingsView: React.FC<SettingsViewProps> = ({ data, currentStore }) => {
         <p className="text-gray-500 mt-1">
           Define la Reposición Automática mínima exigida por categoría. El sistema propondrá subir la RA a este nivel.
         </p>
+      </div>
+
+      {/* 🟢 INYECCIÓN FASE 2: MOTOR DE TIEMPO (Selector Global) */}
+      <div className="p-6 border-b border-gray-200 bg-white flex items-center justify-between">
+        <div>
+          <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+            ⏱️ Motor de Tiempo (Temporada Actual)
+          </h3>
+          <p className="text-sm text-gray-500 mt-1">
+            Detectada automáticamente por volumen en CD. Cámbiala si evalúas un contexto distinto.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-sm font-medium text-gray-700 bg-gray-100 px-3 py-1 rounded-full shadow-inner">
+            Activa: {currentSeason}
+          </span>
+          <select
+            value={currentSeason}
+            onChange={(e) => setCurrentSeason(e.target.value)}
+            className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-purple-500 outline-none bg-white cursor-pointer shadow-sm hover:border-purple-300 transition-colors"
+          >
+            <option value={currentSeason}>{currentSeason}</option>
+            {availableSeasons.map(season => (
+              season !== currentSeason && <option key={season} value={season}>{season}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* 🛡️ CANDADO VISUAL: Mensaje de Advertencia */}
