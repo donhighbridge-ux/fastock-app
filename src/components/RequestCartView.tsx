@@ -12,9 +12,10 @@ interface RequestCartViewProps {
   currentStore: string | null;
   productDictionary: Record<string, string>;
   currentSeason: string;
+  curveDictionary: Record<string, { mode1: number; mode2: number | null }>;
 }
 
-const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, productDictionary, currentSeason }) => {
+const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, productDictionary, currentSeason, curveDictionary }) => {
   // 1. Extraemos solo lo que la vista necesita del Carrito
   const { requestList, removeFromRequest, clearRequest } = useCart();
 
@@ -25,7 +26,7 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, p
   const { handleMagicSweep, sweepFeedback } = useMagicSweep(data, currentStore, isGlobalView, productDictionary);
 
   // 🟢 3.5. ENCHUFAMOS EL MOTOR CAZADOR
-  const { huntOpportunities, hunterFeedback } = useOpportunityHunter(data, currentStore, productDictionary, currentSeason);
+  const { huntOpportunities, hunterFeedback } = useOpportunityHunter(data, currentStore, productDictionary, currentSeason, curveDictionary);
 
   // 🟢 3.6. ENCHUFAMOS EL MOTOR DE AUDITORÍA RA
   const { scanRA, raFeedback, isScanningRA } = useAlertaRA(data, currentStore, productDictionary);

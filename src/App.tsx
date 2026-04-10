@@ -14,6 +14,7 @@ import NotificationBell from './components/NotificationBell';
 import './App.css';
 import { uploadStockBatch } from './services/firebaseStockService';
 import { uploadDictionaryBatch } from './services/dictionaryService';
+import { useCurveDictionary } from './hooks/useCurveDictionary';
 
 const ORGANIZATION_ID = "demo_org_v1";
 const ALL_STORES_OPTION = "Todas las Tiendas";
@@ -162,6 +163,9 @@ function App() {
 
   // 🟢 INYECCIÓN FASE 2: Estado de Temporada y Motor de Auto-Detección
   const [currentSeason, setCurrentSeason] = useState<string>('Detectando...');
+
+  // 🟢 INYECCIÓN FASE 3: El Diccionario Dinámico de Curvas
+  const curveDictionary = useCurveDictionary(data);
 
   useEffect(() => {
     if (!data || data.length === 0) return;
@@ -646,7 +650,8 @@ function App() {
                 data={data} 
                 currentStore={currentFilters.tienda}
                 productDictionary={productDictionary}
-                currentSeason={currentSeason} 
+                currentSeason={currentSeason}
+                curveDictionary={curveDictionary} 
               />
             </div>
           )}

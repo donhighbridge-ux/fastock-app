@@ -6,7 +6,8 @@ export const useOpportunityHunter = (
   data: NormalizedRow[], 
   currentStore: string | null, 
   productDictionary: Record<string, string>,
-  currentSeason: string
+  currentSeason: string,
+  curveDictionary: Record<string, { mode1: number; mode2: number | null }>
 ) => {
   const { addToRequest } = useCart();
   const [hunterFeedback, setHunterFeedback] = useState<string | null>(null);
@@ -35,7 +36,7 @@ export const useOpportunityHunter = (
 
 // 🟢 NUEVO ECOSISTEMA: Sensores para cazar Fantasmas
     const myStoreModels = new Map<string, { 
-      category: string, totalSizes: Set<string>, coveredSizes: Set<string>, desc: string,
+      area: string,category: string, totalSizes: Set<string>, coveredSizes: Set<string>, desc: string,
       totalStoreStock: number, totalTransit: number, cdAvailableSizes: Set<string>, season: string 
     }>();
 
@@ -44,6 +45,7 @@ export const useOpportunityHunter = (
       const baseSku = parts.length >= 2 ? parts.slice(0, 2).join('_') : row.sku;
       const size = parts.length > 2 ? parts.slice(2).join('_') : 'Única';
       const cat = row.categoria?.trim().toUpperCase() || 'SIN CATEGORÍA';
+      const area = row.area?.trim().toUpperCase() || 'SIN_AREA';
 
       if (Number(row.ra) >= 1 || Number(row.stock) > 0) {
         myStoreSkus.add(baseSku);
@@ -51,7 +53,7 @@ export const useOpportunityHunter = (
 
       if (!myStoreModels.has(baseSku)) {
         myStoreModels.set(baseSku, { 
-          category: cat, totalSizes: new Set(), coveredSizes: new Set(), desc: productDictionary[baseSku.toLowerCase()] || row.description || '',
+          area: area, category: cat, totalSizes: new Set(), coveredSizes: new Set(), desc: productDictionary[baseSku.toLowerCase()] || row.description || '',
           totalStoreStock: 0, totalTransit: 0, cdAvailableSizes: new Set(), season: row.temporada?.trim().toUpperCase() || 'SIN TEMPORADA'
         });
       }
@@ -73,8 +75,21 @@ export const useOpportunityHunter = (
     });
 
     myStoreModels.forEach((stats, baseSku) => {
+      // 🧠 CONSULTA AL DICCIONARIO
+      const dictKey = `${stats.area}_${stats.category}`;
+      const rules = curveDictionary[dictKey];
+      const expectedSizes = rules && rules.mode1 > 0 ? rules.mode1 : stats.totalSizes.size;
+
+      // 📊 CÁLCULO INTELIGENTE (Busca el mejor ratio si existe una Moda 2 permitida)
+      let cdHealthRatio = stats.cdAvailableSizes.size / expectedSizes;
+      let healthRatio = stats.coveredSizes.size / expectedSizes;
+
+      if (rules?.mode2 && rules.mode2 > 0) {
+        cdHealthRatio = Math.max(cdHealthRatio, stats.cdAvailableSizes.size / rules.mode2);
+        healthRatio = Math.max(healthRatio, stats.coveredSizes.size / rules.mode2);
+      }
+
       // 👻 EL EXORCISMO: Filtro Anti-Fantasmas
-      const cdHealthRatio = stats.cdAvailableSizes.size / stats.totalSizes.size;
       const isGhost = stats.totalStoreStock === 0 && 
                       stats.totalTransit === 0 && 
                       cdHealthRatio < 0.8 && 
@@ -87,12 +102,11 @@ export const useOpportunityHunter = (
       const catStat = categoryStats.get(stats.category)!;
       catStat.totalModels++;
 
-      const healthRatio = stats.coveredSizes.size / stats.totalSizes.size;
       if (healthRatio >= 0.8) {
         catStat.healthyModels++;
       } else {
-        const pct = Math.round(healthRatio * 100);
-        catStat.hitList.push(`${baseSku} - ${pct}% (${stats.coveredSizes.size} de ${stats.totalSizes.size} tallas) - ${stats.desc}`);
+        const pct = Math.min(Math.round(healthRatio * 100), 100); // Visualmente tope 100%
+        catStat.hitList.push(`${baseSku} - ${pct}% (${stats.coveredSizes.size} de ${expectedSizes} tallas esperadas) - ${stats.desc}`);
       }
     });
 
@@ -143,7 +157,17 @@ export const useOpportunityHunter = (
     globalModels.forEach((stats, baseSku) => {
       if (stats.totalSizes.size === 0) return;
       
-      const cdHealthRatio = stats.cdSizesAvailable.size / stats.totalSizes.size;
+      // 🧠 CONSULTA AL DICCIONARIO
+      const dictKey = `${stats.area.trim().toUpperCase()}_${stats.category}`;
+      const rules = curveDictionary[dictKey];
+      const expectedSizes = rules && rules.mode1 > 0 ? rules.mode1 : stats.totalSizes.size;
+
+      // 📊 CÁLCULO INTELIGENTE
+      let cdHealthRatio = stats.cdSizesAvailable.size / expectedSizes;
+      if (rules?.mode2 && rules.mode2 > 0) {
+        cdHealthRatio = Math.max(cdHealthRatio, stats.cdSizesAvailable.size / rules.mode2);
+      }
+
       const isValidSeason = stats.season === 'BÁSICO' || stats.season === currentSeason || stats.season === carryoverSeason;
 
       // 🛡️ Filtro de Hierro Comercial (Salud CD y Temporada)
