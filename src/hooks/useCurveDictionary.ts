@@ -14,6 +14,14 @@ export const useCurveDictionary = (data: NormalizedRow[]): Record<string, CurveR
     // 1. RECOLECCIÓN: Agrupar por Área -> Categoría -> Modelo -> Cantidad de Tallas
     const sizeCounts: Record<string, Record<string, Record<string, Set<string>>>> = {};
 
+    // 🟢 MAPA DE RELEVANCIA: Solo productos con huella en CD pueden votar
+    const skusWithCdStock = new Set<string>();
+
+    // 🟢 NUEVOS RASTREADORES PARA LA REGLA DEL 50%
+    // Estructura: SKU -> Tienda -> { raSizes: Set, floorSizes: Set }
+    const skuStoreHealth: Record<string, Record<string, { ra: Set<string>, floor: Set<string> }>> = {};
+    const totalStores = new Set<string>();
+    
     data.forEach(row => {
       const area = row.area?.trim().toUpperCase() || 'SIN_AREA';
       const cat = row.categoria?.trim().toUpperCase() || 'SIN_CATEGORIA';
@@ -25,10 +33,24 @@ export const useCurveDictionary = (data: NormalizedRow[]): Record<string, CurveR
       if (!sizeCounts[area][cat]) sizeCounts[area][cat] = {};
       if (!sizeCounts[area][cat][baseSku]) sizeCounts[area][cat][baseSku] = new Set();
 
-      // Solo contamos la talla si tiene existencia física o teórica en la empresa
-      if ((Number(row.stock) || 0) > 0 || (Number(row.transit) || 0) > 0 || (Number(row.stock_cd) || 0) > 0) {
-          sizeCounts[area][cat][baseSku].add(size);
+      // Capturamos todas las tallas que el Excel dice que existen
+      sizeCounts[area][cat][baseSku].add(size);
+      
+      // Pero anotamos si el producto está "vivo" en el CD
+      if (Number(row.stock_cd) >= 1) {
+        skusWithCdStock.add(baseSku);
       }
+
+      // 🟢 REGISTRO DE SALUD POR TIENDA
+      totalStores.add(row.tiendaNombre);
+      if (!skuStoreHealth[baseSku]) skuStoreHealth[baseSku] = {};
+      if (!skuStoreHealth[baseSku][row.tiendaNombre]) {
+        skuStoreHealth[baseSku][row.tiendaNombre] = { ra: new Set(), floor: new Set() };
+      }
+
+      const storePresence = skuStoreHealth[baseSku][row.tiendaNombre];
+      if (Number(row.ra) >= 1) storePresence.ra.add(size);
+      if (Number(row.stock) >= 1 || Number(row.transit) >= 1) storePresence.floor.add(size);
     });
 
     // 2. MATEMÁTICA ESTADÍSTICA: Calcular Frecuencias (Modas)
@@ -39,10 +61,36 @@ export const useCurveDictionary = (data: NormalizedRow[]): Record<string, CurveR
       Object.keys(sizeCounts[area]).forEach(cat => {
         const freqMap: Record<number, number> = {};
         
-        Object.values(sizeCounts[area][cat]).forEach(sizeSet => {
-          const count = sizeSet.size;
-          if (count > 0) {
-            freqMap[count] = (freqMap[count] || 0) + 1;
+        Object.keys(sizeCounts[area][cat]).forEach(baseSku => {
+          const sizeSet = sizeCounts[area][cat][baseSku];
+          const totalModelSizes = sizeSet.size;
+          if (totalModelSizes === 0) return;
+
+          // 1. ¿Vota por CD? (Presencia mínima)
+          let canVote = skusWithCdStock.has(baseSku);
+
+          // 2. ¿Vota por Presencia en Tienda (Regla del 50%)?
+          if (!canVote) {
+            let healthyStoresCount = 0;
+            const storeData = skuStoreHealth[baseSku] || {};
+            
+            Object.values(storeData).forEach(health => {
+              const raHealth = health.ra.size / totalModelSizes;
+              const floorHealth = health.floor.size / totalModelSizes;
+              // La tienda vota positivo si tiene salud de RA y salud de Piso (Stock+Transit) >= 80%
+              if (raHealth >= 0.8 && floorHealth >= 0.8) {
+                healthyStoresCount++;
+              }
+            });
+
+            // Si el 50% de las tiendas del país lo tienen sano, se le permite definir la moda
+            if (totalStores.size > 0 && (healthyStoresCount / totalStores.size) >= 0.5) {
+              canVote = true;
+            }
+          }
+
+          if (canVote) {
+            freqMap[totalModelSizes] = (freqMap[totalModelSizes] || 0) + 1;
           }
         });
 
@@ -55,11 +103,13 @@ export const useCurveDictionary = (data: NormalizedRow[]): Record<string, CurveR
       });
     });
 
-    // 3. LÓGICA DE NEGOCIO: La Ley de la Doble Curva y el Escudo de Tops
+    // 3. LÓGICA DE NEGOCIO: Estándares de Calidad y Doble Curva
+    const ACCESSORIES_AREAS = ['ACCESSORIES', 'ACCESORIOS', 'SIN_AREA', 'SIN AREA', 'KID ACC', 'TOD ACC'];
+    const ACCESSORIES_CATS = ['CALCETINES', 'CARTERAS', 'JOCKEYS Y GORROS', 'BISUTERIA', 'BUFANDAS', 'CINTURONES'];
     const BOTTOMS = ['JEANS', 'PANTALONES', 'SHORTS'];
 
     Object.keys(categoryModes).forEach(area => {
-      // 🛡️ El Ancla: Buscar la Moda 1 de POLERAS en esta área específica
+      // 🛡️ El Ancla de Poleras (Escudo de Tops)
       const polerasFreqs = categoryModes[area]['POLERAS'];
       const polerasMode1 = polerasFreqs && polerasFreqs.length > 0 ? polerasFreqs[0].count : 0;
 
@@ -67,14 +117,24 @@ export const useCurveDictionary = (data: NormalizedRow[]): Record<string, CurveR
         const freqs = categoryModes[area][cat];
         if (freqs.length === 0) return;
 
-        const mode1 = freqs[0].count; // El 100% indiscutible
+        // 🟢 APLICACIÓN DEL ESTÁNDAR DE 6
+        const isAccessory = ACCESSORIES_AREAS.includes(area) || ACCESSORIES_CATS.includes(cat);
+        let mode1 = freqs[0].count;
+
+        if (!isAccessory) {
+          // Si es ropa y la moda detectada es < 6, buscamos si hay una moda sana disponible
+          if (mode1 < 6) {
+            const saneMode = freqs.find(f => f.count >= 6);
+            mode1 = saneMode ? saneMode.count : 6; // Si no hay nada >= 6, forzamos el estándar 6
+          }
+        }
+
         let mode2: number | null = null;
 
-        // Si es un Bottom y tiene un segundo grupo importante de tallas
+        // Doble Curva para Bottoms (Pantalones)
         if (BOTTOMS.includes(cat) && freqs.length > 1) {
           const potentialMode2 = freqs[1].count;
-          
-          // Aplicar el Escudo de Tops: Solo pasa si es mayor o igual a las poleras
+          // El Escudo de Tops: La curva corta debe ser al menos igual a las poleras
           if (polerasMode1 > 0 && potentialMode2 >= polerasMode1) {
             mode2 = potentialMode2;
           }

@@ -50,7 +50,7 @@ export const generarReporteOportunidades = async (requestList: CartItem[], allDa
       const contextData = catItems[0].categoryHealth || [];
       contextData.forEach((line, index) => {
         const ctxRow = sheet.getRow(currentRow);
-        ctxRow.values = [index === 0 ? '📊 SALUD DEL MUEBLE:' : '', line];
+        ctxRow.values = [index === 0 ? '📊 SALUD DE LA CATEGORÍA:' : '', line];
         ctxRow.font = { italic: index !== 0, bold: index === 0, color: { argb: index === 0 ? 'FF000000' : 'FFEF4444' } };
         sheet.mergeCells(currentRow, 2, currentRow, 8);
         currentRow++;

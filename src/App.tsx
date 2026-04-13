@@ -172,7 +172,7 @@ function App() {
     const seasonSums: Record<string, number> = {};
     data.forEach(row => {
       const t = row.temporada?.trim().toUpperCase();
-      if (t && t !== 'BÁSICO' && t !== 'SIN TEMPORADA') {
+      if (t && t !== 'BASICO' && t !== 'SIN TEMPORADA') {
         seasonSums[t] = (seasonSums[t] || 0) + Number(row.stock_cd || 0);
       }
     });

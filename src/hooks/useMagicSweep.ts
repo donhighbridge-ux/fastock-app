@@ -71,6 +71,7 @@ export const useMagicSweep = (data: NormalizedRow[], currentStore: string | null
       const stock = Number(row.stock) || 0;
       const cd = Number(row.stock_cd) || 0;
       const transit = Number(row.transit) || 0;
+      const vta = Number(row.sales2w) || Number(row.sales2w) || 0;
 
       // 🛡️ SANITIZACIÓN ABSOLUTA: Destruye cualquier formato fantasma
       // 🛡️ SANITIZACIÓN ABSOLUTA: Destruye cualquier formato fantasma
@@ -89,13 +90,16 @@ export const useMagicSweep = (data: NormalizedRow[], currentStore: string | null
       // La talla es rechazada si tiene RA 0 y NO cumple con el indulto del 50%.
       const isNotAssigned = safeRa <= 0 && !isTallaApagada;
       
-      // 🛡️ PROTECCIÓN PUNTO 1: Evitar el "Saldo Inexhibible" (Curva Rota)
-      if (radar && radar.totalStock === 0 && radar.totalSales === 0 && radar.cdSizesAvailable.size <= 1) {
-        return; // Abortamos, no lo pedimos.
-      }
+      // 🛡️ REGLA 1: Protección contra "Quiebre de Origen" (Si CD <= 1 y Stock <= 1, no pedimos)
+      if (stock <= 1 && cd <= 1) return;
 
-      // 🛡️ REGLA CLÁSICA: Tu lógica original intacta
-      if (stock < 2 && cd > 0 && transit === 0 && !isNotAssigned) {
+      // 🛡️ REGLA 2 + CLÁSICA: Decisión de Solicitud
+      const hasSalesVelocity = vta >= stock && vta > 0; // Se vendió lo mismo o más de lo que hay
+      const isLowStock = stock < 2 && transit === 0;    // Lógica de quiebre tradicional
+
+      if ((hasSalesVelocity || isLowStock) && cd > 0 && !isNotAssigned) {
+        const qty = hasSalesVelocity ? (vta - stock) : 1;
+        console.log(`[MagicSweep] Solicitud: ${baseSku}_${size} | Vta: ${vta} | Stk: ${stock} | Motivo: ${hasSalesVelocity ? 'VELOCIDAD' : 'QUIEBRE'}`);
         
         const draftKey = `${baseSku}-${row.tiendaNombre}`;
 
@@ -103,16 +107,20 @@ export const useMagicSweep = (data: NormalizedRow[], currentStore: string | null
           const draft = sweepDrafts.get(draftKey)!;
           if (!draft.sizes.includes(size)) {
              draft.sizes.push(size);
+          if (!draft.sizeQuantities) draft.sizeQuantities = {};
+             draft.sizeQuantities[size] = qty;
           }
         } else {
           sweepDrafts.set(draftKey, {
             sku: baseSku,
             sizes: [size],
             area: row.area || 'General',
+            category: row.categoria,
             description: productDictionary[baseSkuLower] || row.description,
             timestamp: Date.now(),
             originStore: row.tiendaNombre,
-            requestType: 'stock'
+            requestType: 'stock',
+            sizeQuantities: { [size]: qty } // 🟢 Registro inicial de la cantidad
           });
         }
         itemsAdded++; 

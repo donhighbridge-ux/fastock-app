@@ -4,6 +4,7 @@ import { createContext, useContext } from 'react';
 export interface CartItem {
   sku: string;
   sizes: string[];
+  sizeQuantities?: Record<string, number>; // 🟢 Registro del diferencial (Venta - Stock)
   area: string;
   category: string; // 🟢 Guarda la categoría
   categoryHealth?: string[]; // 🟢 Guarda la Hit List y el diagnóstico
