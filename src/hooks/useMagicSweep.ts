@@ -74,7 +74,6 @@ export const useMagicSweep = (data: NormalizedRow[], currentStore: string | null
       const vta = Number(row.sales2w) || Number(row.sales2w) || 0;
 
       // 🛡️ SANITIZACIÓN ABSOLUTA: Destruye cualquier formato fantasma
-      // 🛡️ SANITIZACIÓN ABSOLUTA: Destruye cualquier formato fantasma
       const rawRa = Number(row.ra);
       const safeRa = isNaN(rawRa) ? 0 : rawRa;
       
@@ -94,7 +93,7 @@ export const useMagicSweep = (data: NormalizedRow[], currentStore: string | null
       if (stock <= 1 && cd <= 1) return;
 
       // 🛡️ REGLA 2 + CLÁSICA: Decisión de Solicitud
-      const hasSalesVelocity = vta >= stock && vta > 0; // Se vendió lo mismo o más de lo que hay
+      const hasSalesVelocity = vta >= stock && vta > 0 && transit === 0; // Se vendió lo mismo o más de lo que hay pero con veto de tránsito
       const isLowStock = stock < 2 && transit === 0;    // Lógica de quiebre tradicional
 
       if ((hasSalesVelocity || isLowStock) && cd > 0 && !isNotAssigned) {

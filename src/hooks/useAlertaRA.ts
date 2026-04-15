@@ -3,17 +3,20 @@ import { useCart } from '../context/useCart';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../firebase-config';
 import type { NormalizedRow } from '../types';
+import { getCarryover, isCurrentOrBasicSeason } from '../utils/hunterRules';
 
 export const useAlertaRA = (
   data: NormalizedRow[], 
   currentStore: string | null, 
-  productDictionary: Record<string, string>
+  productDictionary: Record<string, string>,
+  currentSeason: string
 ) => {
   const { addToRequest } = useCart();
   const [raFeedback, setRaFeedback] = useState<string | null>(null);
   const [isScanningRA, setIsScanningRA] = useState(false);
 
   const scanRA = async () => {
+    const carryoverSeason = getCarryover(currentSeason);
     console.log('🚨 SEÑAL DE BOTÓN RECIBIDA: Iniciando scanRA...'); // <--- INYECTA ESTO
     if (!currentStore || currentStore === 'all' || currentStore === 'Todas las Tiendas') {
       setRaFeedback('⚠️ Selecciona una tienda específica para auditar la RA.');
@@ -77,6 +80,7 @@ export const useAlertaRA = (
       // ------------------------------------------------------------------
       const proposals = new Map<string, {
         area: string;
+        category: string;
         description: string;
         proposedRaMap: Record<string, number>;
       }>();
@@ -103,10 +107,16 @@ export const useAlertaRA = (
           console.log('------------------------------------------------');
         }
 
+        // 🛡️ REGLA 1: FILTRO DE TEMPORADA (Básicos, Actual y Carryover)
+        const season = row.temporada?.trim().toUpperCase() || 'SIN TEMPORADA';
+        const isValidSeason = isCurrentOrBasicSeason(season, currentSeason) || season === carryoverSeason;
+        
+        if (!isValidSeason) return;
+
         // 🛡️ REGLA MAESTRA DEL 80%: ¿La cadena tiene inventario para respaldar esto?
         if (radar && radar.totalSizes > 0) {
           const healthRatio = radar.physicallyAliveSizes / radar.totalSizes;
-          if (healthRatio < 0.6) {
+          if (healthRatio < 0.8) {
             return; // Abortar: La curva está rota a nivel cadena. No se piden alzas de RA.
           }
         }
@@ -115,17 +125,9 @@ export const useAlertaRA = (
         const rawRa = Number(row.ra);
         const safeRa = isNaN(rawRa) ? 0 : rawRa;
         
-        // 🛡️ REGLA: Ignorar RA 0 o no asignada
+        // 🛡️ REGLA: Solo auditamos productos que la tienda YA TIENE asignados (RA > 0)
+        // Pero eliminamos el "Filtro Anti-Zombies" para cumplir con la Regla 2 de Bloque Completo.
         if (safeRa <= 0) return;
-
-        const stock = Number(row.stock) || 0;
-        const cd = Number(row.stock_cd) || 0;
-        const transit = Number(row.transit) || 0;
-        const sales = Number(row.sales2w) || 0;
-
-        // 🛡️ FILTRO ANTI-ZOMBIES: Detección de cadáveres digitales que pasaron por algún hueco
-        const isZombie = safeRa >= 1 && cd === 0 && stock === 0 && transit === 0 && sales === 0;
-        if (isZombie) return;
 
         // Construir la llave para buscar la ley
         const area = row.area?.trim().toUpperCase() || 'SIN ÁREA';
@@ -140,6 +142,7 @@ export const useAlertaRA = (
           if (!proposals.has(baseSkuOriginal)) {
             proposals.set(baseSkuOriginal, {
               area: row.area || 'General',
+              category: cat,
               description: productDictionary[baseSkuLower] || row.description,
               proposedRaMap: {}
             });
@@ -158,6 +161,7 @@ export const useAlertaRA = (
            sku: baseSku,
            sizes: Object.keys(details.proposedRaMap), // Solo las tallas que fallaron la auditoría
            area: details.area,
+           category: details.category,
            description: details.description,
            timestamp: Date.now(),
            originStore: currentStore,

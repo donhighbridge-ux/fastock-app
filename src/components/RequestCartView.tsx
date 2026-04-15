@@ -29,7 +29,7 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, p
   const { huntOpportunities, hunterFeedback } = useOpportunityHunter(data, currentStore, productDictionary, currentSeason, curveDictionary);
 
   // 🟢 3.6. ENCHUFAMOS EL MOTOR DE AUDITORÍA RA
-  const { scanRA, raFeedback, isScanningRA } = useAlertaRA(data, currentStore, productDictionary);
+  const { scanRA, raFeedback, isScanningRA } = useAlertaRA(data, currentStore, productDictionary, currentSeason);
 
   // ⚫ 3.7. NUEVO MOTOR: ÚLTIMAS TALLAS
   const { scanUltimasTallas, isScanningUltimas, ultimasFeedback } = useUltimasTallas(data, currentStore, productDictionary);
