@@ -30,6 +30,7 @@ export const TrackingListView: React.FC<TrackingListViewProps> = ({ data, curren
       sku: item.sku,
       sizes: item.sizes,
       area: item.area,
+      category: item.category,
       description: item.description,
       timestamp: getTimestamp(),
       originStore: item.originStore,

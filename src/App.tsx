@@ -69,7 +69,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ step, options, onSelect, 
   );
 };
 
-const Sidebar = ({ currentView, setCurrentView, currentStore }: { currentView: 'dashboard' | 'upload' | 'cart' | 'tracking' | 'settings', setCurrentView: (t: 'dashboard' | 'upload' | 'cart' | 'tracking' | 'settings') => void, currentStore: string | null }) => {
+const Sidebar = ({ currentView, setCurrentView, currentStore }: { currentView: 'dashboard' | 'upload' | 'cart' | 'tracking' | 'montage' | 'settings', setCurrentView: (t: 'dashboard' | 'upload' | 'cart' | 'tracking' | 'montage' | 'settings') => void, currentStore: string | null }) => {
   const { requestList, trackingList } = useCart();
   const isStoreSelected = currentStore && currentStore !== ALL_STORES_ID;
 
@@ -127,6 +127,15 @@ const Sidebar = ({ currentView, setCurrentView, currentStore }: { currentView: '
             </button>
           </>
         )}
+
+        <button
+          onClick={() => setCurrentView('montage')}
+          className={`w-full text-left px-4 py-3 rounded-lg transition-colors flex items-center gap-2 ${
+            currentView === 'montage' ? 'bg-slate-800 text-white' : 'text-gray-400 hover:bg-slate-800 hover:text-white'
+          }`}
+        >
+          <span>🗺️</span> Montaje
+        </button>
       </nav>
 
           {/* 🟢 NUEVO: BOTÓN DE CONFIGURACIÓN (Esquina inferior izquierda) */}
@@ -149,7 +158,7 @@ function App() {
   const [filteredData, setFilteredData] = useState<NormalizedRow[]>(data);
   const [isLoading, setIsLoading] = useState(true);
   const [productDictionary, setProductDictionary] = useState<Record<string, string>>({});
-  const [currentView, setCurrentView] = useState<'dashboard' | 'upload' | 'cart' | 'tracking' | 'settings'>('dashboard');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'upload' | 'cart' | 'tracking' | 'montage' | 'settings'>('dashboard');
   const [sizeMap, setSizeMap] = useState<Record<string, string>>({});
   const [currentFilters, setCurrentFilters] = useState<{
     marca: string | null;
@@ -672,6 +681,14 @@ function App() {
                 data={data} // <--- CORRECCIÓN: Pasamos la data procesada
                 currentStore={currentFilters.tienda || ''} // <--- CORRECCIÓN: Evitamos que pase null
               />
+            </div>
+          )}
+
+          {currentView === 'montage' && (
+            <div className="max-w-7xl mx-auto mt-4 flex flex-col items-center justify-center h-[60vh] text-gray-400">
+               <span className="text-6xl mb-4 opacity-20">🏗️</span>
+               <h2 className="text-2xl font-bold text-gray-800">Módulo de Montaje</h2>
+               <p className="text-sm italic">En construcción: Calibrando motores de geometría...</p>
             </div>
           )}
 

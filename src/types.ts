@@ -80,3 +80,33 @@ export interface GroupedProduct {
   health: StockHealth;
 
 }
+
+// ==========================================
+// 5. CAPA DE MONTAJE Y GEOMETRÍA (REGLAS V1)
+// ==========================================
+
+export interface FurnitureType {
+  id: string;          // Ej: 'MESA_JEANS_GAP'
+  name: string;        // Nombre amigable
+  widthCm: number;     // Medidas reales para el AutoCAD
+  depthCm: number;
+  categoryDefault?: string; 
+}
+
+export interface FurnitureInstance {
+  id: string;          // ID único de esa mesa específica en la tienda
+  typeId: string;      // Referencia al FurnitureType
+  x: number;           // Coordenada X en el SVG (0-100 o píxeles)
+  y: number;           // Coordenada Y
+  rotation: number;    // Rotación del mueble
+  zoneId: string;      // A qué zona pertenece (Ej: 'DENIM_WALL')
+}
+
+export interface WallDefinition {
+  id: string;
+  totalWidthCm: number;
+  totalHeightCm: number;
+  currentExhibitionHeightCm: number; // Tu "altura variable" de exhibición
+  calibrationRatio: number;          // El ratio píxeles/cm de esa pared
+  segments: { id: string, widthCm: number }[];
+}

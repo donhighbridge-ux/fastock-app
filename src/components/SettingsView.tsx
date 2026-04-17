@@ -16,6 +16,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ data, currentStore, current
   const [expandedArea, setExpandedArea] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'ra' | 'season' | 'measures'>('ra');
 
   // 🟢 INYECCIÓN FASE 2: Extraer temporadas únicas para el selector manual
   const availableSeasons = useMemo(() => {
@@ -93,132 +94,164 @@ const SettingsView: React.FC<SettingsViewProps> = ({ data, currentStore, current
   return (
     <div className="relative h-[calc(100vh-6rem)] flex flex-col bg-gray-50 rounded-xl overflow-hidden shadow-inner">
       {/* CABECERA */}
-      <div className="p-6 border-b border-gray-200 bg-white">
-        <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
-          ⚙️ Centro de Comando (Leyes RA)
-        </h2>
-        <p className="text-gray-500 mt-1">
-          Define la Reposición Automática mínima exigida por categoría. El sistema propondrá subir la RA a este nivel.
-        </p>
-      </div>
-
-      {/* 🟢 INYECCIÓN FASE 2: MOTOR DE TIEMPO (Selector Global) */}
-      <div className="p-6 border-b border-gray-200 bg-white flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-            ⏱️ Motor de Tiempo (Temporada Actual)
-          </h3>
-          <p className="text-sm text-gray-500 mt-1">
-            Detectada automáticamente por volumen en CD. Cámbiala si evalúas un contexto distinto.
-          </p>
+      <div className="bg-white border-b border-gray-200">
+        <div className="p-6">
+          <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+            ⚙️ Centro de Comando
+          </h2>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-sm font-medium text-gray-700 bg-gray-100 px-3 py-1 rounded-full shadow-inner">
-            Activa: {currentSeason}
-          </span>
-          <select
-            value={currentSeason}
-            onChange={(e) => setCurrentSeason(e.target.value)}
-            className="px-4 py-2 border border-gray-300 rounded-lg text-sm font-medium focus:ring-2 focus:ring-purple-500 outline-none bg-white cursor-pointer shadow-sm hover:border-purple-300 transition-colors"
+        
+        {/* Barra de Sub-Navegación */}
+        <div className="flex px-6 gap-6">
+          <button
+            onClick={() => setActiveTab('ra')}
+            className={`pb-4 px-2 text-sm font-bold transition-all border-b-2 ${
+              activeTab === 'ra' ? 'border-purple-600 text-purple-700' : 'border-transparent text-gray-400 hover:text-gray-600'
+            }`}
           >
-            <option value={currentSeason}>{currentSeason}</option>
-            {availableSeasons.map(season => (
-              season !== currentSeason && <option key={season} value={season}>{season}</option>
-            ))}
-          </select>
+            Configurar Parámetros RA
+          </button>
+          <button
+            onClick={() => setActiveTab('season')}
+            className={`pb-4 px-2 text-sm font-bold transition-all border-b-2 ${
+              activeTab === 'season' ? 'border-purple-600 text-purple-700' : 'border-transparent text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            Configurar Temporada Actual
+          </button>
+          <button
+            onClick={() => setActiveTab('measures')}
+            className={`pb-4 px-2 text-sm font-bold transition-all border-b-2 ${
+              activeTab === 'measures' ? 'border-purple-600 text-purple-700' : 'border-transparent text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            Configurar Medidas Inmueble
+          </button>
         </div>
       </div>
 
-      {/* 🛡️ CANDADO VISUAL: Mensaje de Advertencia */}
-      {!isStoreSelected && (
-        <div className="m-6 bg-amber-100 border-l-4 border-amber-500 text-amber-700 p-4 shadow-sm rounded-r-md">
-          <div className="flex items-center">
-            <span className="text-2xl mr-3">⚠️</span>
-            <div>
-              <p className="font-bold">Modo de Solo Lectura</p>
-              <p className="text-sm">Selecciona una tienda específica en el menú principal para poder editar las leyes.</p>
+      <div className="flex-1 overflow-y-auto flex flex-col min-h-0">
+        {/* ⚠️ SECCIÓN DE ADVERTENCIA */}
+        {!isStoreSelected && (
+          <div className="m-6 bg-amber-50 border-l-4 border-amber-400 text-amber-700 p-4 shadow-sm rounded-md">
+            <p className="font-bold text-sm">⚠️ Tienda no seleccionada</p>
+            <p className="text-xs">Selecciona una tienda en el Dashboard para gestionar sus leyes y medidas.</p>
+          </div>
+        )}
+
+        {/* 🟢 SUB-MÓDULO: TEMPORADA ACTUAL */}
+        {activeTab === 'season' && (
+          <div className="p-8 bg-white m-6 rounded-xl border border-gray-200 shadow-sm animate-fade-in">
+            <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">⏱️ Motor de Tiempo</h3>
+            <p className="text-sm text-gray-500 mb-6">Define la temporada operativa. Esto afecta qué productos se consideran "Temporada Actual" o "Carryover".</p>
+            <div className="flex items-center gap-4">
+              <span className="text-sm font-medium text-gray-700 bg-purple-50 px-4 py-2 rounded-lg border border-purple-100">
+                Activa: <strong>{currentSeason}</strong>
+              </span>
+              <select
+                value={currentSeason}
+                onChange={(e) => setCurrentSeason(e.target.value)}
+                className="px-4 py-2 border border-gray-300 rounded-lg text-sm bg-white shadow-sm outline-none focus:ring-2 focus:ring-purple-500"
+              >
+                <option value={currentSeason}>{currentSeason}</option>
+                {availableSeasons.map(s => s !== currentSeason && <option key={s} value={s}>{s}</option>)}
+              </select>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* ÁREA DE ACORDEONES (Scrollable) */}
-      <div className="flex-1 overflow-y-auto p-6 space-y-4 pb-32">
-        {Object.keys(hierarchy).sort().map(area => (
-          <div key={area} className="bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
-            {/* Cabecera del Acordeón */}
-            <button 
-              onClick={() => setExpandedArea(expandedArea === area ? null : area)}
-              className="w-full flex justify-between items-center p-4 bg-gray-100 hover:bg-gray-200 transition font-bold text-gray-700"
-            >
-              <span>{area} ({hierarchy[area].size} Categorías)</span>
-              <span>{expandedArea === area ? '▲' : '▼'}</span>
-            </button>
-            
-            {/* Contenido del Acordeón (Categorías) */}
-            {expandedArea === area && (
-              <div className="divide-y divide-gray-100">
-                {Array.from(hierarchy[area]).sort().map(cat => {
-                  const key = `${area}_${cat}`;
-                  const val = thresholds[key];
-                  const isNCA = val === null || val === undefined;
+        {/* 🟢 SUB-MÓDULO: PARÁMETROS RA */}
+        {activeTab === 'ra' && (
+          <div className="flex-1 flex flex-col min-h-0 animate-fade-in">
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {Object.keys(hierarchy).sort().map((area) => (
+                <div key={area} className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+                  <button 
+                    onClick={() => setExpandedArea(expandedArea === area ? null : area)}
+                    className="w-full flex justify-between items-center p-4 bg-gray-50 hover:bg-gray-100 transition-colors font-bold text-gray-700"
+                  >
+                    <span>{area} ({hierarchy[area].size} Categorías)</span>
+                    <span>{expandedArea === area ? '▲' : '▼'}</span>
+                  </button>
+                  
+                  {expandedArea === area && (
+                    <div className="divide-y divide-gray-100">
+                      {Array.from(hierarchy[area]).sort().map(cat => {
+                        const key = `${area}_${cat}`;
+                        const val = thresholds[key];
+                        const isNCA = val === null || val === undefined;
+                        return (
+                          <div key={cat} className="flex justify-between items-center p-4 hover:bg-gray-50 transition-colors">
+                            <span className="font-medium text-gray-600">{cat}</span>
+                            <div className="flex items-center gap-3">
+                              <button 
+                                onClick={() => handleDecrease(key)} 
+                                disabled={!isStoreSelected || isNCA || val <= 1} 
+                                className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 transition-colors flex items-center justify-center font-bold disabled:opacity-30"
+                              >-</button>
+                              
+                              <div className={`w-12 text-center font-bold ${isNCA ? 'text-gray-300 text-sm' : 'text-purple-700 text-lg'}`}>
+                                {isNCA ? 'NCA' : val}
+                              </div>
 
-                  return (
-                    <div key={cat} className="flex justify-between items-center p-4 hover:bg-gray-50">
-                      <span className="font-medium text-gray-600">{cat}</span>
-                      
-                      {/* El Stepper NCA */}
-                      <div className="flex items-center gap-3">
-                        <button 
-                          onClick={() => handleDecrease(key)}
-                          disabled={!isStoreSelected || isNCA || val <= 1}
-                          className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-lg bg-gray-200 text-gray-600 hover:bg-gray-300 disabled:opacity-30 transition cursor-pointer"
-                        >-</button>
-                        
-                        <div className={`w-12 text-center font-bold text-lg ${isNCA ? 'text-gray-400 text-sm' : 'text-purple-700'}`}>
-                          {isNCA ? 'NCA' : val}
-                        </div>
-                        
-                        <button 
-                          onClick={() => handleIncrease(key)}
-                          disabled={!isStoreSelected}
-                          className="w-8 h-8 rounded-full flex items-center justify-center font-bold text-lg bg-gray-200 text-gray-600 hover:bg-gray-300 disabled:opacity-30 transition cursor-pointer"
-                        >+</button>
+                              <button 
+                                onClick={() => handleIncrease(key)} 
+                                disabled={!isStoreSelected} 
+                                className="w-8 h-8 rounded-full bg-gray-200 hover:bg-gray-300 transition-colors flex items-center justify-center font-bold disabled:opacity-30"
+                              >+</button>
 
-                        <button 
-                          onClick={() => handleClear(key)}
-                          disabled={!isStoreSelected || isNCA}
-                          className="ml-2 text-red-400 hover:text-red-600 disabled:opacity-0 transition cursor-pointer"
-                          title="Restablecer a NCA"
-                        >
-                          🗑️
-                        </button>
-                      </div>
+                              {/* 🟢 AQUÍ SE USA HANDLE_CLEAR - ELIMINA EL ERROR DE COMPILACIÓN */}
+                              <button 
+                                onClick={() => handleClear(key)} 
+                                disabled={!isStoreSelected || isNCA} 
+                                className="ml-2 text-red-300 hover:text-red-600 transition-colors disabled:opacity-0"
+                                title="Restablecer a NCA"
+                              >
+                                🗑️
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+                  )}
+                </div>
+              ))}
+            </div>
 
-      {/* 🟢 PANEL DE GUARDADO (Fijo en la zona inferior) */}
-      <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 px-6 flex justify-between items-center shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-        <div>
-          {saveMessage && (
-            <span className={`font-medium animate-fade-in ${saveMessage.includes('✅') ? 'text-green-600' : 'text-red-600'}`}>
-              {saveMessage}
-            </span>
-          )}
-        </div>
-        <button
-          onClick={handleSave}
-          disabled={!isStoreSelected || isSaving}
-          className="bg-purple-700 hover:bg-purple-800 text-white font-bold py-3 px-8 rounded-lg shadow-md transition-colors flex items-center gap-2 disabled:opacity-50"
-        >
-          {isSaving ? 'Guardando...' : '💾 Guardar Leyes de RA'}
-        </button>
+            {/* BOTÓN DE GUARDADO LOCAL RA */}
+            <div className="p-6 bg-white border-t border-gray-200 flex justify-between items-center sticky bottom-0 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
+              <div className="flex flex-col">
+                <span className="text-sm text-gray-500 font-bold">
+                  {saveMessage || "* Los cambios afectan la Alerta RA en el Carrito."}
+                </span>
+              </div>
+              <button
+                onClick={handleSave}
+                disabled={!isStoreSelected || isSaving}
+                className="bg-purple-700 hover:bg-purple-800 text-white font-bold py-2 px-8 rounded-lg transition-all disabled:opacity-50 shadow-md active:scale-95"
+              >
+                {isSaving ? 'Guardando...' : '💾 Guardar Parámetros RA'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 🟢 SUB-MÓDULO: MEDIDAS INMUEBLE */}
+        {activeTab === 'measures' && (
+          <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-12 animate-fade-in">
+            <span className="text-6xl mb-4 opacity-20">📐</span>
+            <h3 className="text-xl font-bold text-gray-800">Configurar Medidas Inmueble</h3>
+            <p className="max-w-md text-center mt-2 text-sm italic">
+              Preparando entorno para carga de Excel geométrico y AutoCAD...
+            </p>
+            <div className="mt-8">
+               <button disabled={true} className="bg-gray-100 text-gray-400 border border-gray-200 font-bold py-2 px-8 rounded-lg cursor-not-allowed">
+                 💾 Guardar Medidas Inmueble
+               </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
