@@ -9,6 +9,7 @@ import { StockDashboard } from './components/StockDashboard';
 import RequestCartView from './components/RequestCartView';
 import { TrackingListView } from './components/TrackingListView';
 import SettingsView from './components/SettingsView';
+import { MontageView } from './components/Montage/MontageView';
 import type { NormalizedRow } from './types';
 import NotificationBell from './components/NotificationBell';
 import './App.css';
@@ -685,10 +686,11 @@ function App() {
           )}
 
           {currentView === 'montage' && (
-            <div className="max-w-7xl mx-auto mt-4 flex flex-col items-center justify-center h-[60vh] text-gray-400">
-               <span className="text-6xl mb-4 opacity-20">🏗️</span>
-               <h2 className="text-2xl font-bold text-gray-800">Módulo de Montaje</h2>
-               <p className="text-sm italic">En construcción: Calibrando motores de geometría...</p>
+            <div className="max-w-7xl mx-auto mt-4 h-full">
+               <MontageView 
+                 currentStore={currentFilters.tienda} 
+                 onStoreChange={(store) => setCurrentFilters(prev => ({ ...prev, tienda: store }))}
+               />
             </div>
           )}
 

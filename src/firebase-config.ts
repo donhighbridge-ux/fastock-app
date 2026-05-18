@@ -1,6 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
+import { getStorage } from 'firebase/storage';
 
 // Tu configuración de Firebase para esta aplicación web.
 // Es crucial que las variables de entorno en el archivo .env comiencen con "VITE_".
@@ -25,3 +26,4 @@ const auth = getAuth(app);
 
 // Exportar las instancias para usarlas en otras partes de la aplicación
 export { app, db, auth };
+export const storage = getStorage(app);

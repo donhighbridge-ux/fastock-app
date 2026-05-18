@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase-config';
 import type { NormalizedRow } from '../types';
+import { LayoutUploader } from './Montage/LayoutUploader';
 
 interface SettingsViewProps {
   data: NormalizedRow[];
@@ -16,7 +17,7 @@ const SettingsView: React.FC<SettingsViewProps> = ({ data, currentStore, current
   const [expandedArea, setExpandedArea] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'ra' | 'season' | 'measures'>('ra');
+  const [activeTab, setActiveTab] = useState<'ra' | 'season' | 'layout'>('ra');
 
   // 🟢 INYECCIÓN FASE 2: Extraer temporadas únicas para el selector manual
   const availableSeasons = useMemo(() => {
@@ -120,12 +121,12 @@ const SettingsView: React.FC<SettingsViewProps> = ({ data, currentStore, current
             Configurar Temporada Actual
           </button>
           <button
-            onClick={() => setActiveTab('measures')}
+            onClick={() => setActiveTab('layout')}
             className={`pb-4 px-2 text-sm font-bold transition-all border-b-2 ${
-              activeTab === 'measures' ? 'border-purple-600 text-purple-700' : 'border-transparent text-gray-400 hover:text-gray-600'
+              activeTab === 'layout' ? 'border-purple-600 text-purple-700' : 'border-transparent text-gray-400 hover:text-gray-600'
             }`}
           >
-            Configurar Medidas Inmueble
+            Subir Plano de Tienda (SVG)
           </button>
         </div>
       </div>
@@ -237,19 +238,26 @@ const SettingsView: React.FC<SettingsViewProps> = ({ data, currentStore, current
           </div>
         )}
 
-        {/* 🟢 SUB-MÓDULO: MEDIDAS INMUEBLE */}
-        {activeTab === 'measures' && (
-          <div className="flex-1 flex flex-col items-center justify-center text-gray-400 p-12 animate-fade-in">
-            <span className="text-6xl mb-4 opacity-20">📐</span>
-            <h3 className="text-xl font-bold text-gray-800">Configurar Medidas Inmueble</h3>
-            <p className="max-w-md text-center mt-2 text-sm italic">
-              Preparando entorno para carga de Excel geométrico y AutoCAD...
-            </p>
-            <div className="mt-8">
-               <button disabled={true} className="bg-gray-100 text-gray-400 border border-gray-200 font-bold py-2 px-8 rounded-lg cursor-not-allowed">
-                 💾 Guardar Medidas Inmueble
-               </button>
+        {/* 🔵 NUEVO MÓDULO: CARGA DE PLANO (LAYOUT) */}
+        {activeTab === 'layout' && (
+          <div className="flex-1 flex flex-col p-8 animate-fade-in">
+            <div className="flex items-center gap-4 mb-6">
+              <span className="text-4xl">🗺️</span>
+              <div>
+                <h3 className="text-xl font-bold text-gray-800">Infraestructura de Tienda</h3>
+                <p className="text-sm text-gray-500">Gestión de mapas vectoriales para análisis de stock físico.</p>
+              </div>
             </div>
+            
+            {isStoreSelected ? (
+              <LayoutUploader currentStore={currentStore!} />
+            ) : (
+              <div className="bg-purple-50 border-2 border-dashed border-purple-200 rounded-xl p-12 flex flex-col items-center justify-center text-center">
+                <p className="text-purple-600 font-medium italic">
+                  ⚠️ Selecciona una tienda en el menú superior para comenzar la vinculación.
+                </p>
+              </div>
+            )}
           </div>
         )}
       </div>

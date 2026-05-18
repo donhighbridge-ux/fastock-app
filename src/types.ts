@@ -81,32 +81,22 @@ export interface GroupedProduct {
 
 }
 
-// ==========================================
-// 5. CAPA DE MONTAJE Y GEOMETRÍA (REGLAS V1)
-// ==========================================
-
-export interface FurnitureType {
-  id: string;          // Ej: 'MESA_JEANS_GAP'
-  name: string;        // Nombre amigable
-  widthCm: number;     // Medidas reales para el AutoCAD
-  depthCm: number;
-  categoryDefault?: string; 
+export interface StoreLayout {
+  id: string;            // ID del documento en Firestore
+  storeId: string;      // El "Slug" normalizado (ej: 'vina-del-mar') [cite: 10]
+  svgUrl: string;       // URL de descarga desde Firebase Storage
+  fileName: string;     // Nombre original del archivo para referencia
+  createdAt: number;    // Timestamp de creación
+  active: boolean;      // Interruptor para el plano vigente
 }
 
-export interface FurnitureInstance {
-  id: string;          // ID único de esa mesa específica en la tienda
-  typeId: string;      // Referencia al FurnitureType
-  x: number;           // Coordenada X en el SVG (0-100 o píxeles)
-  y: number;           // Coordenada Y
-  rotation: number;    // Rotación del mueble
-  zoneId: string;      // A qué zona pertenece (Ej: 'DENIM_WALL')
-}
+// --- CONTRATO DE LA FASE 2: MONTAJE DIGITAL ---
 
-export interface WallDefinition {
-  id: string;
-  totalWidthCm: number;
-  totalHeightCm: number;
-  currentExhibitionHeightCm: number; // Tu "altura variable" de exhibición
-  calibrationRatio: number;          // El ratio píxeles/cm de esa pared
-  segments: { id: string, widthCm: number }[];
+export type MontageFilterType = 'venta' | 'stock' | 'configuracion' | null;
+export type MontageToolType = 'lineas' | 'mueble' | null;
+
+export interface DropdownOption<T> {
+  id: T;
+  label: string;
+  emoji: string;
 }
