@@ -4,13 +4,22 @@ import type { MontageFilterType, MontageToolType, DropdownOption } from '../../t
 interface MontageTopbarProps {
   currentStore: string | null | undefined;
   onStoreChange: (store: string) => void;
+  selectedFilter: MontageFilterType;
+  setSelectedFilter: React.Dispatch<React.SetStateAction<MontageFilterType>>;
+  selectedTool: MontageToolType;
+  setSelectedTool: React.Dispatch<React.SetStateAction<MontageToolType>>;
 }
 
-export const MontageTopbar: React.FC<MontageTopbarProps> = ({ currentStore, onStoreChange }) => {
-  // Estados para controlar qué dropdown está abierto en la UI
+export const MontageTopbar: React.FC<MontageTopbarProps> = ({ 
+  currentStore, 
+  onStoreChange,
+  selectedFilter,
+  setSelectedFilter,
+  selectedTool,
+  setSelectedTool
+}) => {
+  // Estado local único para la apertura física de menús desplegables
   const [activeMenu, setActiveMenu] = useState<'filters' | 'tools' | null>(null);
-  const [selectedFilter, setSelectedFilter] = useState<MontageFilterType>(null);
-  const [selectedTool, setSelectedTool] = useState<MontageToolType>(null);
 
   // Lista de tiendas dummy para el MVP (Las 8 tiendas que gestionará visual)
   const storesList = [
@@ -51,13 +60,15 @@ export const MontageTopbar: React.FC<MontageTopbarProps> = ({ currentStore, onSt
         <div className="relative">
           <button 
             onClick={() => toggleDropdown('filters')}
-            className={`px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all border ${
+            className={`w-48 px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-between transition-all border ${
               selectedFilter ? 'bg-purple-950/50 border-purple-500 text-purple-300' : 'bg-slate-800 border-slate-700 hover:bg-slate-700'
             }`}
           >
-            <span>{filterOptions.find(o => o.id === selectedFilter)?.emoji || '🔍'}</span>
-            <span>{filterOptions.find(o => o.id === selectedFilter)?.label || 'Filtros'}</span>
-            <span className="text-xs opacity-50">▼</span>
+            <div className="flex items-center gap-2 truncate">
+              <span>{filterOptions.find(o => o.id === selectedFilter)?.emoji || '🔍'}</span>
+              <span className="truncate">{filterOptions.find(o => o.id === selectedFilter)?.label || 'Filtros'}</span>
+            </div>
+            <span className="text-xs opacity-50 ml-1">▼</span>
           </button>
 
           {activeMenu === 'filters' && (
@@ -68,7 +79,13 @@ export const MontageTopbar: React.FC<MontageTopbarProps> = ({ currentStore, onSt
                   onClick={() => {
                     setSelectedFilter(option.id);
                     setActiveMenu(null);
-                    console.log(`[MontageTopbar] Filtro seleccionado: ${option.id}`);
+                    // Si activa configuración, por defecto selecciona 'lineas'
+                    if (option.id === 'configuracion') {
+                      setSelectedTool('lineas');
+                      console.log(`[MontageTopbar] Modo Configuración activo. Herramienta por defecto: lineas`);
+                    } else {
+                      setSelectedTool(null); // Resetea herramientas en otros filtros
+                    }
                   }}
                   className="w-full px-4 py-3 text-left text-sm font-semibold hover:bg-slate-700 transition-colors flex justify-between items-center border-b border-slate-700/50 last:border-0"
                 >
@@ -83,14 +100,21 @@ export const MontageTopbar: React.FC<MontageTopbarProps> = ({ currentStore, onSt
         {/* DROPDOWN 2: HERRAMIENTAS */}
         <div className="relative">
           <button 
+            disabled={selectedFilter !== 'configuracion'}
             onClick={() => toggleDropdown('tools')}
-            className={`px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all border ${
-              selectedTool ? 'bg-purple-950/50 border-purple-500 text-purple-300' : 'bg-slate-800 border-slate-700 hover:bg-slate-700'
+            className={`w-48 px-4 py-2 rounded-xl text-sm font-bold flex items-center justify-between transition-all border ${
+              selectedFilter !== 'configuracion'
+                ? 'bg-slate-800/40 border-slate-800/20 text-slate-500 opacity-30 grayscale pointer-events-none'
+                : selectedTool 
+                  ? 'bg-purple-950/50 border-purple-500 text-purple-300' 
+                  : 'bg-slate-800 border-slate-700 hover:bg-slate-700'
             }`}
           >
-            <span>{toolOptions.find(o => o.id === selectedTool)?.emoji || '🛠️'}</span>
-            <span>{toolOptions.find(o => o.id === selectedTool)?.label || 'Herramientas'}</span>
-            <span className="text-xs opacity-50">▼</span>
+            <div className="flex items-center gap-2 truncate">
+              <span>{toolOptions.find(o => o.id === selectedTool)?.emoji || '🛠️'}</span>
+              <span className="truncate">{toolOptions.find(o => o.id === selectedTool)?.label || 'Herramientas'}</span>
+            </div>
+            <span className="text-xs opacity-50 ml-1">▼</span>
           </button>
 
           {activeMenu === 'tools' && (
