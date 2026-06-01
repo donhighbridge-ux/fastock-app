@@ -90,10 +90,25 @@ export interface StoreLayout {
   active: boolean;      // Interruptor para el plano vigente
 }
 
+// ==========================================
+// 5. CAPA GEOMÉTRICA (MOTOR ESPACIAL)
+// ==========================================
+export interface Point2D {
+  x: number;
+  y: number;
+}
+
+export interface StoreSector {
+  id: string;
+  points: Point2D[];   // Lista infinita de vértices en lugar de x1, y1
+  color?: string;      // Tinta seca
+  storeId?: string;
+}
+
 // --- CONTRATO DE LA FASE 2: MONTAJE DIGITAL ---
 
 export type MontageFilterType = 'venta' | 'stock' | 'configuracion' | null;
-export type MontageToolType = 'lineas' | 'mueble' | null;
+export type MontageToolType = 'lineas' | 'mueble' | 'borrador' | null;
 
 export interface DropdownOption<T> {
   id: T;

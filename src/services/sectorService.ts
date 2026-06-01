@@ -1,66 +1,62 @@
 // 💡 NOTA DE FLETCHER: Si tu archivo de Firebase está directamente en src/firebase.ts, cambia la ruta a '../firebase'
 import { db } from '../firebase-config'; 
 import { collection, addDoc, getDocs, query, where, writeBatch, doc } from 'firebase/firestore';
-import type { DrawingLine } from '../hooks/useSectorDrawing'; // ✅ Corregido con 'import type' para verbatimModuleSyntax
+import type { StoreSector } from '../types';
 
-const COLLECTION_NAME = 'drawing_lines';
+const COLLECTION_NAME = 'store_sectors'; // 🚀 Nueva colección limpia en la nube
 
 export const sectorService = {
   /**
-   * Guarda una línea punteada en Firestore vinculada a una tienda específica
+   * Guarda un polígono cerrado (Sector) en Firestore
    */
-  async saveLine(storeId: string, line: DrawingLine): Promise<void> {
+  async saveSector(storeId: string, sector: StoreSector): Promise<void> {
     try {
       const colRef = collection(db, COLLECTION_NAME);
       await addDoc(colRef, {
-        id: line.id,
-        x1: line.x1,
-        y1: line.y1,
-        x2: line.x2,
-        y2: line.y2,
+        id: sector.id,
+        points: sector.points,
+        color: sector.color || '#a855f7',
         storeId: storeId,
         createdAt: Date.now()
       });
-      console.log(`[sectorService] Línea ${line.id} persistida en Firestore para la tienda: ${storeId}`);
+      console.log(`[sectorService] Sector ${sector.id} persistido en Firestore para la tienda: ${storeId}`);
     } catch (error) {
-      console.error(`[sectorService] Error crítico al guardar línea en Firestore:`, error);
+      console.error(`[sectorService] Error crítico al guardar sector en Firestore:`, error);
       throw error;
     }
   },
 
   /**
-   * Recupera todas las líneas de geometría guardadas para una tienda específica
+   * Recupera todos los sectores guardados para una tienda específica
    */
-  async getLines(storeId: string): Promise<DrawingLine[]> {
+  async getSectors(storeId: string): Promise<StoreSector[]> {
     try {
       const colRef = collection(db, COLLECTION_NAME);
       const q = query(colRef, where('storeId', '==', storeId));
       const querySnapshot = await getDocs(q);
 
-      const savedLines: DrawingLine[] = [];
+      const savedSectors: StoreSector[] = [];
       querySnapshot.forEach((docSnap) => {
         const data = docSnap.data();
-        savedLines.push({
+        savedSectors.push({
           id: data.id,
-          x1: data.x1,
-          y1: data.y1,
-          x2: data.x2,
-          y2: data.y2
+          points: data.points || [],
+          color: data.color
         });
       });
 
-      console.log(`[sectorService] Éxito: ${savedLines.length} líneas vectoriales recuperadas desde la nube para ${storeId}`);
-      return savedLines;
+      console.log(`[sectorService] Éxito: ${savedSectors.length} sectores recuperados desde la nube para ${storeId}`);
+      return savedSectors;
     } catch (error) {
-      console.error(`[sectorService] Error al recuperar la geometría de la tienda ${storeId}:`, error);
+      console.error(`[sectorService] Error al recuperar los sectores de la tienda ${storeId}:`, error);
       throw error;
     }
   },
 
   /**
-   * Elimina de golpe todas las líneas de dibujo correspondientes a una tienda
+   * Elimina de golpe todos los sectores correspondientes a una tienda
    */
-  async clearLines(storeId: string): Promise<void> {
+  async clearSectors(storeId: string): Promise<void> {
     try {
       const colRef = collection(db, COLLECTION_NAME);
       const q = query(colRef, where('storeId', '==', storeId));
