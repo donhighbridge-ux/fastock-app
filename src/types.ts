@@ -123,6 +123,7 @@ export interface HardwareConfig {
   type: HardwareType;
   colIndex: number;          // En qué columna (cremallera) está enganchado (0, 1, 2...)
   verticalPosition: number;
+  horizontalPosition?: number;
   children?: HardwareConfig[];  // A qué altura está colgado
 }
 

@@ -10,7 +10,12 @@ interface PlanogramWorkspaceProps {
 }
 
 export const PlanogramWorkspace: React.FC<PlanogramWorkspaceProps> = ({ sector, onClose }) => {
-  const [localSector, setLocalSector] = useState<StoreSector>(sector);
+  // 🕰️ MÁQUINA DEL TIEMPO: Estados de Historial (Undo/Redo)
+  const [history, setHistory] = useState<StoreSector[]>([sector]);
+  const [historyIndex, setHistoryIndex] = useState(0);
+  
+  // El sector actual siempre es el que apunta el índice de la máquina del tiempo
+  const localSector = history[historyIndex];
   const walls = localSector.wallsConfig || [];
   const [activeWallId, setActiveWallId] = useState<string | null>(walls[0]?.id || null);
   // 🧰 Memoria de la herramienta seleccionada
@@ -20,10 +25,21 @@ export const PlanogramWorkspace: React.FC<PlanogramWorkspaceProps> = ({ sector, 
   useEffect(() => {
     const handleEsc = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
+
+      // ⏪ UNDO: Ctrl + Z
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        if (historyIndex > 0) setHistoryIndex(prev => prev - 1);
+      }
+      // ⏩ REDO: Ctrl + Y o Ctrl + Shift + Z
+      if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') || ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z')) {
+        e.preventDefault();
+        if (historyIndex < history.length - 1) setHistoryIndex(prev => prev + 1);
+      }
     };
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
-  }, [onClose]);
+  }, [onClose, history, historyIndex]);
 
   const activeWall = walls.find(w => w.id === activeWallId);
 
@@ -97,9 +113,14 @@ export const PlanogramWorkspace: React.FC<PlanogramWorkspaceProps> = ({ sector, 
                 wall={activeWall}
                 activeTool={activeHardware}
                 onUpdateWall={(updatedWall) => {
-                  // 🧠 Actualizamos la copia local de forma inmutable
+                  // 🧠 Calculamos el nuevo sector
                   const updatedWalls = walls.map(w => w.id === updatedWall.id ? updatedWall : w);
-                  setLocalSector(prev => ({ ...prev, wallsConfig: updatedWalls }));
+                  const newSector = { ...localSector, wallsConfig: updatedWalls };
+                  
+                  // 🕰️ Viaje en el tiempo: Cortamos futuros alternativos y guardamos el nuevo presente
+                  const newHistory = history.slice(0, historyIndex + 1);
+                  setHistory([...newHistory, newSector]);
+                  setHistoryIndex(newHistory.length);
                 }}
               />
             ) : (
