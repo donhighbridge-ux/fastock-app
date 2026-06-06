@@ -5,6 +5,7 @@ import { getDistanceBetweenPoints } from '../utils/geometry';
 export const useSectorDrawing = () => {
   const [sectors, setSectors] = useState<StoreSector[]>([]);
   const [currentPolygon, setCurrentPolygon] = useState<Point2D[]>([]);
+  const [redoStack, setRedoStack] = useState<Point2D[]>([]); // 📦 La papelera de reciclaje para el Redo
 
   /**
    * Registra un punto en el lienzo coordinando la lógica Impar/Par
@@ -35,10 +36,12 @@ export const useSectorDrawing = () => {
       setSectors(prev => [...prev, newSector]);
       setCurrentPolygon([]);
       console.log(`[useSectorDrawing] 🧲 Cierre Magnético: Sector consolidado con ${currentPolygon.length} vértices.`);
+      setRedoStack([]); // Limpiamos la papelera al cerrar el sector
     } else {
       // 🔗 CONTINUACIÓN: Simplemente agrega otro vértice a la cadena
       setCurrentPolygon(prev => [...prev, { x, y }]);
       console.log(`[useSectorDrawing] Vértice ${currentPolygon.length + 1} agregado.`);
+      setRedoStack([]); // Si el usuario dibuja una nueva línea manualmente, se pierde el futuro alternativo
     }
   };
 
@@ -58,8 +61,23 @@ export const useSectorDrawing = () => {
   const undoLastPoint = () => {
     setCurrentPolygon(prev => {
       if (prev.length === 0) return prev;
+      const lastPoint = prev[prev.length - 1];
+      setRedoStack(stack => [...stack, lastPoint]); // Guardamos en la papelera
       console.log(`[useSectorDrawing] ⏪ Vértice deshecho. Quedan ${prev.length - 1} puntos.`);
       return prev.slice(0, -1);
+    });
+  };
+
+  /**
+   * ⏩ Rehacer (Redo): Saca el último punto de la papelera y lo vuelve a pintar
+   */
+  const redoLastPoint = () => {
+    setRedoStack(prev => {
+      if (prev.length === 0) return prev;
+      const pointToRestore = prev[prev.length - 1];
+      setCurrentPolygon(curr => [...curr, pointToRestore]); // Lo devolvemos al mapa
+      console.log(`[useSectorDrawing] ⏩ Vértice restaurado.`);
+      return prev.slice(0, -1); // Lo quitamos de la papelera
     });
   };
 
@@ -80,6 +98,8 @@ export const useSectorDrawing = () => {
     cancelCurrentLine,
     undoLastPoint,
     clearAllLines,
-    setSectors
+    setSectors,
+    redoLastPoint,
+    redoStack,
   };
 };

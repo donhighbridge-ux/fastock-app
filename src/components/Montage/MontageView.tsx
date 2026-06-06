@@ -1,11 +1,10 @@
 import React from 'react';
 import { useStoreLayout } from '../../hooks/useStoreLayout';
 import { LayoutDisplay } from './LayoutDisplay';
-
 import { MontageTopbar } from './MontageTopbar';
-
 import { useState } from 'react';
 import type { MontageFilterType, MontageToolType } from '../../types';
+import { useSectorDrawing } from '../../hooks/useSectorDrawing';
 
 interface MontageViewProps {
   currentStore: string | null | undefined;
@@ -18,6 +17,9 @@ export const MontageView: React.FC<MontageViewProps> = ({ currentStore, onStoreC
   // Estados compartidos para orquestar la Fase 3
   const [activeFilter, setActiveFilter] = useState<MontageFilterType>(null);
   const [activeTool, setActiveTool] = useState<MontageToolType>(null);
+
+  // 🧠 El Cerebro elevado (Lifting State Up)
+  const drawingConfig = useSectorDrawing();
 
   const isStoreSelected = currentStore && currentStore !== 'all' && currentStore !== 'Todas las Tiendas';
 
@@ -32,6 +34,10 @@ export const MontageView: React.FC<MontageViewProps> = ({ currentStore, onStoreC
         setSelectedFilter={setActiveFilter}
         selectedTool={activeTool}
         setSelectedTool={setActiveTool}
+        onUndo={drawingConfig.undoLastPoint}
+        onRedo={drawingConfig.redoLastPoint}
+        canUndo={drawingConfig.currentPolygon.length > 0}
+        canRedo={drawingConfig.redoStack.length > 0}
       />
 
       {/* 2. LIENZO O AREA DE TRABAJO DINÁMICA */}
@@ -64,6 +70,7 @@ export const MontageView: React.FC<MontageViewProps> = ({ currentStore, onStoreC
             svgUrl={layout.svgUrl} 
             activeTool={activeTool}
             storeId={currentStore || ''}
+            drawingConfig={drawingConfig}
           />
         )}
 

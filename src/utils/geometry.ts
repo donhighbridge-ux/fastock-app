@@ -27,6 +27,16 @@ export const getDistanceToLine = (x: number, y: number, x1: number, y1: number, 
 };
 
 /**
+ * Calcula el centro de gravedad (Centroide) de un polígono.
+ * Utilizado para anclar botones y modales flotantes en el centro exacto del sector.
+ */
+export const getPolygonCentroid = (points: {x: number, y: number}[]): {x: number, y: number} => {
+  if (!points || points.length === 0) return { x: 0, y: 0 };
+  const sum = points.reduce((acc, p) => ({ x: acc.x + p.x, y: acc.y + p.y }), { x: 0, y: 0 });
+  return { x: sum.x / points.length, y: sum.y / points.length };
+};
+
+/**
  * Calcula la distancia euclidiana entre dos puntos.
  * Utilizado para el "Imán" de cierre de polígonos continuos.
  */

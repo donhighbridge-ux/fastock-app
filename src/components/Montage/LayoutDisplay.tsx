@@ -4,20 +4,25 @@ import { sectorService } from '../../services/sectorService';
 import type { MontageToolType } from '../../types';
 import { useRef } from 'react';
 import { useZoomPan } from '../../hooks/useZoomPan';
+import { getPolygonCentroid } from '../../utils/geometry';
+import { SectorConfigModal } from './SectorConfigModal';
+import type { StoreSector } from '../../types';
+import { PlanogramWorkspace } from './PlanogramWorkspace';
 
 interface LayoutDisplayProps {
   svgUrl: string;
   activeTool: MontageToolType;
   storeId: string;
+  drawingConfig: ReturnType<typeof useSectorDrawing>;
 }
 
-export const LayoutDisplay: React.FC<LayoutDisplayProps> = ({ svgUrl, activeTool, storeId }) => {
+export const LayoutDisplay: React.FC<LayoutDisplayProps> = ({ svgUrl, activeTool, storeId, drawingConfig }) => {
   const [svgContent, setSvgContent] = useState<string>('');
   const containerRef = useRef<HTMLDivElement>(null); // ✅ Referencia para domar el mousepad
   const { scale, pan, handleZoomIn, handleZoomOut, handleResetZoom } = useZoomPan(containerRef);
 
   // Inicializamos el cerebro del dibujo
-  const { sectors, currentPolygon, isDrawingActive, addPoint, undoLastPoint, setSectors } = useSectorDrawing();
+  const { sectors, currentPolygon, isDrawingActive, addPoint, undoLastPoint, redoLastPoint, cancelCurrentLine, setSectors } = drawingConfig;
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 }); 
   const isInitialLoad = useRef(true); // 🛡️ Sensor para evitar guardados fantasma
 
@@ -27,19 +32,42 @@ export const LayoutDisplay: React.FC<LayoutDisplayProps> = ({ svgUrl, activeTool
   // ⌨️ Sensor de hardware para cambiar el cursor en tiempo real
   const [isAltPressed, setIsAltPressed] = useState<boolean>(false);
 
+  // ⚙️ Estado de edición para el Modal de Configuración
+  const [editingSector, setEditingSector] = useState<StoreSector | null>(null);
+
+  // 📦 Estado de organización para el Lienzo del Planograma
+  const [organizingSector, setOrganizingSector] = useState<StoreSector | null>(null);
+
+  // ⌨️ Sensor de hardware universal
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === 'Alt') setIsAltPressed(true); };
+    const handleKeyDown = (e: KeyboardEvent) => { 
+      if (e.key === 'Alt') setIsAltPressed(true); 
+
+      // ⏪ UNDO: Ctrl + Z (o Cmd + Z en Mac)
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        undoLastPoint();
+      }
+      // ⏩ REDO: Ctrl + Y  -O-  Ctrl + Shift + Z
+      if (((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') || ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'z')) {
+        e.preventDefault();
+        redoLastPoint();
+      }
+    };
+    
     const handleKeyUp = (e: KeyboardEvent) => { 
       if (e.key === 'Alt') setIsAltPressed(false); 
-      if (e.key === 'Backspace' || e.key === 'Escape') undoLastPoint(); // ⏪ El Deshacer en vivo
+      if (e.key === 'Backspace') undoLastPoint();
+      if (e.key === 'Escape') cancelCurrentLine(); 
     };
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [undoLastPoint]);
+  }, [undoLastPoint, redoLastPoint, cancelCurrentLine]); // ✅ Dependencias actualizadas para el linter
 
   useEffect(() => {
     const loadSvg = async () => {
@@ -182,22 +210,67 @@ export const LayoutDisplay: React.FC<LayoutDisplayProps> = ({ svgUrl, activeTool
             onMouseMove={handleCanvasMouseMove}
           >
             {/* 🏗️ 1. SECTORES CONSOLIDADOS (Con relleno semitransparente) */}
-            {sectors.map((sector) => (
-              <polygon
-                key={sector.id}
-                points={sector.points.map(p => `${p.x},${p.y}`).join(' ')}
-                fill={sector.color ? `${sector.color}33` : '#a855f733'} // '33' es 20% de opacidad
-                stroke={sector.color || '#a855f7'}
-                strokeWidth="4" strokeLinejoin="round"
-                className={`transition-all ${(activeTool === 'borrador' || isAltPressed) ? 'cursor-pointer hover:opacity-40 hover:stroke-red-500' : ''}`}
-                onClick={(e) => {
-                  if (activeTool === 'borrador' || e.altKey) {
-                    e.stopPropagation(); // Evita dibujar un punto abajo al borrar
-                    setSectors(prev => prev.filter(s => s.id !== sector.id));
-                  }
-                }}
-              />
-            ))}
+            {sectors.map((sector) => {
+              const center = getPolygonCentroid(sector.points);
+              return (
+                <g key={sector.id}>
+                  <polygon
+                    points={sector.points.map(p => `${p.x},${p.y}`).join(' ')}
+                    fill={sector.color ? `${sector.color}33` : '#a855f733'} 
+                    stroke={sector.color || '#a855f7'}
+                    strokeWidth="4" strokeLinejoin="round"
+                    className={`transition-all ${(activeTool === 'borrador' || isAltPressed) ? 'cursor-pointer hover:opacity-40 hover:stroke-red-500' : ''}`}
+                    onClick={(e) => {
+                      if (activeTool === 'borrador' || e.altKey) {
+                        e.stopPropagation(); 
+                        setSectors(prev => prev.filter(s => s.id !== sector.id));
+                      }
+                    }}
+                  />
+                  
+                  {/* 🏷️ ETIQUETA Y BOTONES FLOTANTES (Ocultos si dibujas/borras) */}
+                  {center && (
+                    <foreignObject 
+                      x={center.x - 75} y={center.y - 30} 
+                      width="150" height="60" 
+                      className={`overflow-visible transition-opacity duration-300 ${(activeTool === 'borrador' || activeTool === 'lineas') ? 'opacity-0 pointer-events-none' : 'opacity-100'}`}
+                    >
+                      <div className="flex flex-col items-center justify-center w-full h-full">
+                        {!sector.isConfigured ? (
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); setEditingSector(sector); }}
+                            className="px-3 py-1.5 bg-white text-blue-600 hover:text-white hover:bg-blue-600 text-[11px] font-bold rounded-lg shadow-md border border-blue-200 transition-colors pointer-events-auto cursor-pointer"
+                          >
+                            ⚙️ Configurar Sector
+                          </button>
+                        ) : (
+                          <div className="flex flex-col items-center gap-1.5 pointer-events-auto">
+                            <span className="text-[11px] font-bold text-slate-800 bg-white/90 px-2 py-0.5 rounded shadow-sm backdrop-blur-sm border border-slate-200 text-center max-w-full truncate">
+                              {sector.name}
+                            </span>
+                            <div className="flex gap-1">
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); setEditingSector(sector); }}
+                              className="px-2 py-1 bg-white text-slate-600 text-[10px] font-bold rounded-md shadow-md hover:bg-slate-100 border border-slate-200 transition-colors cursor-pointer flex items-center justify-center"
+                              title="Editar Paredes"
+                            >
+                              ⚙️
+                            </button>
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); setOrganizingSector(sector); }}
+                              className="px-3 py-1 bg-slate-800 text-white text-[10px] font-bold rounded-md shadow-md hover:bg-slate-700 transition-colors cursor-pointer"
+                            >
+                              📦 Organizar
+                            </button>
+                          </div>
+                          </div>
+                        )}
+                      </div>
+                    </foreignObject>
+                  )}
+                </g>
+              );
+            })}
 
             {/* 🚧 2. TRAZO EN VIVO (Cadena de puntos) */}
             {currentPolygon.length > 0 && (
@@ -224,6 +297,30 @@ export const LayoutDisplay: React.FC<LayoutDisplayProps> = ({ svgUrl, activeTool
 
         </div>
       </div>
+      {/* 🪟 INYECCIÓN DEL MODAL DE CONFIGURACIÓN */}
+      {editingSector && (
+        <SectorConfigModal
+          sector={editingSector}
+          onClose={() => setEditingSector(null)}
+          onSave={(updatedSector) => {
+            // 1. Actualizar el estado visual al instante
+            setSectors((prev: StoreSector[]) => prev.map((s: StoreSector) => s.id === updatedSector.id ? updatedSector : s));
+            
+            // 2. Persistir el cambio en Firebase silenciosamente
+            sectorService.saveSector(storeId, updatedSector).catch(console.error);
+            
+            // 3. Cerrar el modal
+            setEditingSector(null);
+          }}
+        />
+      )}
+    {/* 📦 INYECCIÓN DEL PLANOGRAMA (CASCARÓN FRONTAL) */}
+      {organizingSector && (
+        <PlanogramWorkspace 
+          sector={organizingSector}
+          onClose={() => setOrganizingSector(null)}
+        />
+      )}
     </div>
   );
 };

@@ -98,11 +98,50 @@ export interface Point2D {
   y: number;
 }
 
+// 🧱 Catálogo Oficial de Arquitectura (Inmutable)
+export type WallType = 
+  | 'Pared Corta 1'
+  | 'Pared Corta 2'
+  | 'Pared Larga 1'
+  | 'Pared Larga 2'
+  | 'Pared Mixeada 1'
+  | 'Pared Larga 3'
+  | 'Pared Larga 4'
+  | 'Pared Larga 5';
+
+// 🔧 Catálogo de Hardware (Fierros)
+export type HardwareType =
+  | 'fierro_c'           // Independiente: Barra en U/C para ropa de lado
+  | 'repisa'             // Macro-independiente: Soportes + Tabla de madera
+  | 'fierro_plano'       // Padre: Barra recta transversal
+  | 'gancho_ropa'        // Hijo: Cascada gruesa para ropa de frente
+  | 'gancho_accesorio';  // Hijo: Gancho delgado para accesorios
+
+// 🔩 Estructura de un fierro colgado en la pared
+export interface HardwareConfig {
+  id: string;
+  type: HardwareType;
+  colIndex: number;          // En qué columna (cremallera) está enganchado (0, 1, 2...)
+  verticalPosition: number;
+  children?: HardwareConfig[];  // A qué altura está colgado
+}
+
+// 🏗️ Estructura individual de un muro dentro de un sector
+export interface WallConfig {
+  id: string;       
+  type: WallType;   
+  hardware?: HardwareConfig[]; // 🧲 Memoria de los fierros colgados en este muro específico
+}
+
 export interface StoreSector {
   id: string;
   points: Point2D[];   // Lista infinita de vértices en lugar de x1, y1
   color?: string;      // Tinta seca
   storeId?: string;
+  name?: string;          // El nombre oficial (ej: Sector 1)
+  isConfigured?: boolean; // Fase de madurez (true = Organizar, false = Configurar)
+  wallsConfig?: WallConfig[];    // Espacio reservado para las propiedades de las paredes
+  furnitureConfig?: any[];// Espacio reservado para las propiedades de los muebles
 }
 
 // --- CONTRATO DE LA FASE 2: MONTAJE DIGITAL ---

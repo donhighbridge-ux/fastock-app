@@ -8,6 +8,12 @@ interface MontageTopbarProps {
   setSelectedFilter: React.Dispatch<React.SetStateAction<MontageFilterType>>;
   selectedTool: MontageToolType;
   setSelectedTool: React.Dispatch<React.SetStateAction<MontageToolType>>;
+
+// ⏪ ⏩ Nuevos poderes para el historial
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
 }
 
 export const MontageTopbar: React.FC<MontageTopbarProps> = ({ 
@@ -16,7 +22,11 @@ export const MontageTopbar: React.FC<MontageTopbarProps> = ({
   selectedFilter,
   setSelectedFilter,
   selectedTool,
-  setSelectedTool
+  setSelectedTool,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false
 }) => {
   // Estado local único para la apertura física de menús desplegables
   const [activeMenu, setActiveMenu] = useState<'filters' | 'tools' | null>(null);
@@ -42,7 +52,8 @@ export const MontageTopbar: React.FC<MontageTopbarProps> = ({
 
   const toolOptions: DropdownOption<MontageToolType>[] = [
     { id: 'lineas', label: 'Dibujar Líneas', emoji: '📐' },
-    { id: 'mueble', label: 'Asignar Mueble', emoji: '🗄️' }
+    { id: 'mueble', label: 'Asignar Mueble', emoji: '🗄️' },
+    { id: 'borrador', label: 'Borrador', emoji: '🧹' }
   ];
 
   const toggleDropdown = (menu: 'filters' | 'tools') => {
@@ -136,6 +147,32 @@ export const MontageTopbar: React.FC<MontageTopbarProps> = ({
             </div>
           )}
         </div>
+
+          {/* ⏪ ⏩ BOTONES DE DESHACER / REHACER (Estilo Excel) */}
+        {selectedFilter === 'configuracion' && (
+          <div className="flex items-center gap-1 ml-2 bg-slate-800/40 p-1 rounded-xl border border-slate-700/50">
+            <button
+              onClick={onUndo}
+              disabled={!canUndo}
+              className={`w-10 h-10 flex items-center justify-center rounded-lg font-bold text-xl transition-all ${
+                canUndo ? 'text-slate-200 hover:bg-slate-600 active:scale-95 shadow-md' : 'text-slate-600 grayscale opacity-30 cursor-not-allowed'
+              }`}
+              title="Deshacer (Ctrl+Z)"
+            >
+              ↩️
+            </button>
+            <button
+              onClick={onRedo}
+              disabled={!canRedo}
+              className={`w-10 h-10 flex items-center justify-center rounded-lg font-bold text-xl transition-all ${
+                canRedo ? 'text-slate-200 hover:bg-slate-600 active:scale-95 shadow-md' : 'text-slate-600 grayscale opacity-30 cursor-not-allowed'
+              }`}
+              title="Rehacer (Ctrl+Y)"
+            >
+              ↪️
+            </button>
+          </div>
+        )}
       </div>
 
       {/* SECCIÓN DERECHA: SELECTOR DE TIENDA DINÁMICO */}
