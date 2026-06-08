@@ -9,7 +9,7 @@ interface StockDashboardProps {
   productDictionary: Record<string, string>;
   isMultiStore: boolean;
   searchTerm: string;
-  filters: { health: string; sort: string; size: string | 'all' };
+  filters: { health: string; sort: string; size: string | 'all'; raStatus: string | 'all' };
   sizeMap: Record<string, string>; // Se necesita pasar a la tabla para el Modal
   currentStoreName?: string;
 }
@@ -82,6 +82,35 @@ export const StockDashboard: React.FC<StockDashboardProps> = ({
         return true;
       });
     }
+    
+      // 🟢 NUEVO TIER 5: Filtro de Reposición Automática (RA)
+    if (filters.raStatus && filters.raStatus !== 'all') {
+      result = result.filter(item => {
+        // 1. Buscamos todas las variantes crudas de este producto específico
+        const variants = data.filter(r => 
+          r.sku.toLowerCase().startsWith(item.baseSku.toLowerCase()) && 
+          (isMultiStore ? r.tiendaNombre === item.storeName : true)
+        );
+        
+        // 2. Extraemos y sanitizamos los valores de RA
+        const raValues = variants.map(v => {
+          const ra = Number(v.ra);
+          return isNaN(ra) ? 0 : Math.max(0, ra);
+        });
+
+        // 3. Matemáticas de asignación (Nuestras cajas estancas)
+        const allZero = raValues.length > 0 && raValues.every(ra => ra === 0);
+        const allAssigned = raValues.length > 0 && raValues.every(ra => ra >= 1);
+        const isPartial = !allZero && !allAssigned;
+
+        if (filters.raStatus === 'asignado') return allAssigned;
+        if (filters.raStatus === 'no_asignado') return allZero;
+        if (filters.raStatus === 'apagada') return isPartial;
+        
+        return true;
+      });
+    }
+
       // Tier 3: Ordenamiento
       if (filters.sort && filters.sort !== 'none') {
       // Usamos [...result] para crear una copia y no mutar el array original (Regla de React)
@@ -97,7 +126,7 @@ export const StockDashboard: React.FC<StockDashboardProps> = ({
   }
  
     return result;  
-  }, [groupedData, filters.health, filters.sort, filters.size, sizeMap, data]);
+  }, [groupedData, filters.health, filters.sort, filters.size, filters.raStatus, sizeMap, data, isMultiStore]);
 
   // 3. RENDERIZAMOS LA TABLA (Pasamos 'products' procesados y 'rawData' para los modales)
   return (

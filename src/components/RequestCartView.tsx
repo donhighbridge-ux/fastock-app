@@ -4,7 +4,8 @@ import { useMagicSweep } from '../hooks/useMagicSweep'; // <-- IMPORTAMOS EL MOT
 import { useOpportunityHunter } from '../hooks/useOpportunityHunter';
 import { useAlertaRA } from '../hooks/useAlertaRA'; // 🟢 NUEVO MOTOR
 import { useUltimasTallas } from '../hooks/useUltimasTallas';
-import { generarReporteStock, generarReporteRA, generarReporteOportunidades, generarReporteUltimasTallas } from '../utils/excel';
+import { generarReporteStock, generarReporteRA, generarReporteOportunidades, generarReporteUltimasTallas, generarReporteTransito } from '../utils/excel';
+import { useTransitScanner } from '../hooks/useTransitScanner';
 import type { NormalizedRow } from '../types';
 
 interface RequestCartViewProps {
@@ -34,6 +35,9 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, p
   // ⚫ 3.7. NUEVO MOTOR: ÚLTIMAS TALLAS
   const { scanUltimasTallas, isScanningUltimas, ultimasFeedback } = useUltimasTallas(data, currentStore, productDictionary);
 
+  // 🚚 3.8. NUEVO MOTOR: ESCÁNER DE TRÁNSITO
+  const { scanTransit, transitFeedback } = useTransitScanner(data, currentStore, isGlobalView, productDictionary);
+
   // 4. Filtros de la vista
   const filteredList = isGlobalView
     ? requestList
@@ -44,6 +48,7 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, p
   const hasRA = filteredList.some(item => item.requestType === 'ra');
   const hasOpportunity = filteredList.some(item => item.requestType === 'opportunity'); // 🟢 NUEVO
   const hasUltimas = filteredList.some(item => item.requestType === 'ultimas'); // ⚫ NUEVO VALIDADOR
+  const hasTransit = filteredList.some(item => item.requestType === 'transit'); // 🚚 NUEVO VALIDADOR
 
   // Agrupar por Área
   const groupedItems = filteredList.reduce((acc, item) => {
@@ -88,6 +93,12 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, p
     const storeNameForExcel = currentStore && currentStore !== 'all' ? currentStore : 'Consolidado';
     // Fíjate que le pasamos 'filteredList', el nuevo motor se encarga de filtrar
     generarReporteUltimasTallas(filteredList, storeNameForExcel);
+  };
+
+  // 🚚 NUEVO: Exportación a Excel - Tránsito
+  const handleDownloadTransit = () => {
+    const storeNameForExcel = currentStore && currentStore !== 'all' ? currentStore : 'Consolidado';
+    generarReporteTransito(filteredList, data, storeNameForExcel);
   };
 
   return (
@@ -175,7 +186,8 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, p
             </button>
           </div>
 
-          {/* ⚫ NUEVO BOTÓN: EXCEL ÚLTIMAS TALLAS */}
+          <div className="flex flex-wrap justify-end gap-2">
+            {/* ⚫ NUEVO BOTÓN: EXCEL ÚLTIMAS TALLAS */}
             <button
               onClick={handleDownloadUltimas}
               disabled={!hasUltimas}
@@ -183,19 +195,38 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, p
             >
               ⚫ Excel Últimas
             </button>
+
+            {/* 🚚 NUEVO BOTÓN: BUSCAR TRÁNSITOS */}
+            <button
+              onClick={scanTransit}
+              className="bg-amber-100 hover:bg-amber-200 text-amber-700 font-bold py-2 px-4 rounded-lg border border-amber-300 shadow-sm transition-colors flex items-center gap-2"
+            >
+              🚚 Buscar Tránsitos
+            </button>
+
+            {/* 🚚 NUEVO BOTÓN: EXCEL TRÁNSITOS */}
+            <button
+              onClick={handleDownloadTransit}
+              disabled={!hasTransit}
+              className="bg-amber-500 hover:bg-amber-600 disabled:bg-amber-200 text-white font-bold py-2 px-4 rounded-lg shadow transition-colors flex items-center gap-2"
+            >
+              🚚 Excel Tránsitos
+            </button>
+          </div>
           
           {/* Mensajes de feedback dinámicos */}
-          {(sweepFeedback || hunterFeedback || raFeedback || ultimasFeedback) && (
+          {(sweepFeedback || hunterFeedback || raFeedback || ultimasFeedback || transitFeedback) && (
             <span 
               className={`text-sm font-medium mt-2 animate-pulse ${
                 sweepFeedback?.includes('Éxito') ? 'text-green-600' : 
                 hunterFeedback?.includes('Exitosa') ? 'text-teal-600' : 
                 raFeedback?.includes('Completa') ? 'text-purple-600' :
-                ultimasFeedback?.includes('Listo') ? 'text-gray-800' : 
+                ultimasFeedback?.includes('Listo') ? 'text-gray-800' :
+                transitFeedback?.includes('Listo') ? 'text-amber-600' : 
                 'text-gray-500'
               }`}
             >
-              {sweepFeedback || hunterFeedback || raFeedback || ultimasFeedback}
+              {sweepFeedback || hunterFeedback || raFeedback || ultimasFeedback || transitFeedback}
             </span>
           )}
         </div>
@@ -218,6 +249,7 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, p
           const raItems = items.filter(i => i.requestType === 'ra');
           const opportunityItems = items.filter(i => i.requestType === 'opportunity'); // 🟢 NUEVO
           const ultimasItems = items.filter(item => item.requestType === 'ultimas'); // 🟢 CORREGIDO: Usar 'items' local
+          const transitItems = items.filter(item => item.requestType === 'transit'); // 🚚 NUEVO
 
           return (
             <div key={area} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -384,6 +416,46 @@ const RequestCartView: React.FC<RequestCartViewProps> = ({ data, currentStore, p
                               <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                                 <button
                                   onClick={() => removeFromRequest(item.sku, item.originStore, 'ultimas')}
+                                  className="text-red-500 hover:text-red-700 hover:underline"
+                                >
+                                  Eliminar
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* 🚚 TABLA 5: SECCIÓN TRÁNSITO */}
+                {transitItems.length > 0 && (
+                  <div className="mb-8">
+                    <h4 className="text-lg font-bold text-amber-800 mb-3 flex items-center gap-2">
+                      <span>🚚</span> Próximos a Llegar (Tránsito)
+                    </h4>
+                    <div className="bg-white rounded-lg shadow overflow-hidden border border-amber-200">
+                      <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-amber-50">
+                          <tr>
+                            <th className="px-6 py-3 text-left text-xs font-bold text-amber-800 uppercase tracking-wider">SKU Base</th>
+                            <th className="px-6 py-3 text-left text-xs font-bold text-amber-800 uppercase tracking-wider">Descripción</th>
+                            {isGlobalView && <th className="px-6 py-3 text-left text-xs font-bold text-amber-800 uppercase tracking-wider">Tienda</th>}
+                            <th className="px-6 py-3 text-left text-xs font-bold text-amber-800 uppercase tracking-wider">Tallas en camino</th>
+                            <th className="px-6 py-3 text-right text-xs font-bold text-amber-800 uppercase tracking-wider">Acción</th>
+                          </tr>
+                        </thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {transitItems.map((item) => (
+                            <tr key={`${item.sku}-${item.originStore}-transit`} className="hover:bg-amber-50/50">
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-mono font-medium text-gray-900">{item.sku}</td>
+                              <td className="px-6 py-4 text-sm text-gray-600 truncate max-w-xs">{item.description}</td>
+                              {isGlobalView && <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.originStore}</td>}
+                              <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-amber-600">{item.sizes.join(', ')}</td>
+                              <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                <button
+                                  onClick={() => removeFromRequest(item.sku, item.originStore, 'transit')}
                                   className="text-red-500 hover:text-red-700 hover:underline"
                                 >
                                   Eliminar

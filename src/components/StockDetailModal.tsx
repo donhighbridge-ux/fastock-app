@@ -240,7 +240,28 @@ const StockDetailModal: React.FC<StockDetailModalProps> = ({
                 {health.emoji} {health.status}
               </span>
             </div>
-            <p className="text-xs text-gray-400 font-mono">SKU BASE: {groupSku}</p>
+            <div className="flex items-center gap-1.5 mt-1">
+              <p className="text-xs text-gray-400 font-mono">SKU BASE: {groupSku}</p>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(groupSku);
+                  setActionFeedback(prev => ({ ...prev, 'sku-copy': '¡Copiado!' }));
+                  setTimeout(() => setActionFeedback(prev => {
+                    const next = { ...prev };
+                    delete next['sku-copy'];
+                    return next;
+                  }), 2000);
+                }}
+                className="text-gray-400 hover:text-blue-600 transition-transform hover:scale-110 flex items-center justify-center -mt-0.5"
+                title="Copiar SKU al portapapeles"
+              >
+                {actionFeedback['sku-copy'] ? (
+                  <span className="text-xs font-bold text-green-600 leading-none drop-shadow-sm">✓</span>
+                ) : (
+                  <span className="text-sm leading-none drop-shadow-sm">📋</span>
+                )}
+              </button>
+            </div>
           </div>
           <button onClick={handleCloseModal} className="p-2 -mr-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors">
             ✕

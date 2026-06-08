@@ -3,6 +3,7 @@ import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { db } from '../firebase-config';
 import type { NormalizedRow } from '../types';
 import { LayoutUploader } from './Montage/LayoutUploader';
+import { updateProductName } from '../services/productEditorService';
 
 interface SettingsViewProps {
   data: NormalizedRow[];
@@ -17,7 +18,69 @@ const SettingsView: React.FC<SettingsViewProps> = ({ data, currentStore, current
   const [expandedArea, setExpandedArea] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'ra' | 'season' | 'layout'>('ra');
+  const [activeTab, setActiveTab] = useState<'ra' | 'season' | 'layout' | 'products'>('ra');
+
+  // 🟢 ESTADOS PARA MAESTRO DE PRODUCTOS
+  const [searchSku, setSearchSku] = useState('');
+  const [foundProduct, setFoundProduct] = useState<{sku: string, name: string} | null>(null);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState('');
+  const [productMessage, setProductMessage] = useState<{type: 'success'|'error', text: string} | null>(null);
+  const [isSearchingProduct, setIsSearchingProduct] = useState(false);
+
+  // 🟢 LÓGICA DEL BUSCADOR DE PRODUCTOS
+  const handleSearchProduct = async () => {
+    const term = searchSku.trim().toLowerCase();
+    if (!term) return;
+
+    setIsSearchingProduct(true);
+    setProductMessage(null);
+    setIsEditingName(false);
+    setFoundProduct(null);
+
+    try {
+      // 1. Buscamos primero en la nube (La verdad absoluta)
+      const docRef = doc(db, 'product_dictionary', term);
+      const snap = await getDoc(docRef);
+
+      let currentName = '';
+
+      if (snap.exists() && snap.data().friendlyName) {
+        currentName = snap.data().friendlyName;
+      } else {
+        // 2. Si no está en la nube, escarbamos en el Excel local
+        const match = data.find(r => r.sku.toLowerCase().startsWith(term));
+        if (match) {
+          currentName = match.description || 'Producto Sin Nombre';
+        } else {
+          setProductMessage({ type: 'error', text: 'No se encontró ningún producto con ese SKU en la base.' });
+          setIsSearchingProduct(false);
+          return;
+        }
+      }
+
+      setFoundProduct({ sku: term.toUpperCase(), name: currentName });
+      setEditedName(currentName);
+    } catch (error) {
+      console.error("Error buscando SKU:", error);
+      setProductMessage({ type: 'error', text: 'Error de conexión al buscar.' });
+    }
+    setIsSearchingProduct(false);
+  };
+
+  const handleSaveProductName = async () => {
+    if (!foundProduct || !editedName.trim()) return;
+    try {
+      await updateProductName(foundProduct.sku, editedName.trim());
+      setFoundProduct({ ...foundProduct, name: editedName.trim() });
+      setIsEditingName(false);
+      setProductMessage({ type: 'success', text: '¡Nombre guardado! ✓' });
+      setTimeout(() => setProductMessage(null), 3000);
+    } catch (error) {
+      console.error("Error guardando nombre:", error);
+      setProductMessage({ type: 'error', text: 'Fallo al intentar guardar el nombre.' });
+    }
+  };
 
   // 🟢 INYECCIÓN FASE 2: Extraer temporadas únicas para el selector manual
   const availableSeasons = useMemo(() => {
@@ -127,6 +190,14 @@ const SettingsView: React.FC<SettingsViewProps> = ({ data, currentStore, current
             }`}
           >
             Subir Plano de Tienda (SVG)
+          </button>
+          <button
+            onClick={() => setActiveTab('products')}
+            className={`pb-4 px-2 text-sm font-bold transition-all border-b-2 ${
+              activeTab === 'products' ? 'border-purple-600 text-purple-700' : 'border-transparent text-gray-400 hover:text-gray-600'
+            }`}
+          >
+            Maestro de Productos
           </button>
         </div>
       </div>
@@ -256,6 +327,102 @@ const SettingsView: React.FC<SettingsViewProps> = ({ data, currentStore, current
                 <p className="text-purple-600 font-medium italic">
                   ⚠️ Selecciona una tienda en el menú superior para comenzar la vinculación.
                 </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 🟢 NUEVO MÓDULO: MAESTRO DE PRODUCTOS */}
+        {activeTab === 'products' && (
+          <div className="flex-1 flex flex-col p-8 animate-fade-in overflow-y-auto">
+            <div className="flex items-center gap-4 mb-6">
+              <span className="text-4xl">🏷️</span>
+              <div>
+                <h3 className="text-xl font-bold text-gray-800">Nombres de Productos</h3>
+                <p className="text-sm text-gray-500">Busca un SKU y edita su nombre.</p>
+              </div>
+            </div>
+
+            {/* Buscador Superior */}
+            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6 flex gap-4 items-end">
+              <div className="flex-1">
+                <label className="block text-xs font-bold text-gray-500 mb-2 uppercase tracking-wider">SKU Base del Producto</label>
+                <input
+                  type="text"
+                  placeholder="Ej: 1234_GP00"
+                  value={searchSku}
+                  onChange={(e) => setSearchSku(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => e.key === 'Enter' && handleSearchProduct()}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none uppercase font-mono"
+                />
+              </div>
+              <button
+                onClick={handleSearchProduct}
+                disabled={isSearchingProduct || !searchSku.trim()}
+                className="px-6 py-3 bg-slate-800 text-white font-bold rounded-lg hover:bg-slate-900 transition-all disabled:opacity-50 min-w-[120px]"
+              >
+                {isSearchingProduct ? 'Buscando...' : '🔍 Buscar'}
+              </button>
+            </div>
+
+            {/* Alertas */}
+            {productMessage && (
+              <div className={`p-4 mb-6 rounded-lg font-bold text-sm ${productMessage.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                {productMessage.text}
+              </div>
+            )}
+
+            {/* Tarjeta de Edición (Lapicito) */}
+            {foundProduct && (
+              <div className="bg-white p-6 rounded-xl shadow-sm border border-purple-200 animate-fade-in-up">
+                <div className="text-xs font-bold text-purple-600 uppercase tracking-wider mb-1">Resultado de Base de Datos</div>
+                <div className="text-lg font-mono text-gray-500 mb-4 border-b border-gray-100 pb-4">
+                  SKU: <strong>{foundProduct.sku}</strong>
+                </div>
+
+                <div className="flex items-start gap-4">
+                  <div className="flex-1">
+                    <label className="block text-xs font-bold text-gray-500 mb-2 uppercase tracking-wider">Friendly Name (Nombre Legible)</label>
+                    {!isEditingName ? (
+                      <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg border border-transparent group">
+                        <span className="text-xl font-bold text-gray-800 flex-1">{foundProduct.name}</span>
+                        <button
+                          onClick={() => setIsEditingName(true)}
+                          className="p-3 text-gray-400 hover:text-purple-600 hover:bg-purple-100 rounded-full transition-all"
+                          title="Editar Nombre del Producto"
+                        >
+                          ✏️
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="text"
+                          value={editedName}
+                          onChange={(e) => setEditedName(e.target.value)}
+                          onKeyDown={(e) => e.key === 'Enter' && handleSaveProductName()}
+                          className="flex-1 px-4 py-3 text-xl font-bold text-gray-800 border-2 border-purple-500 rounded-lg outline-none shadow-inner"
+                          autoFocus
+                        />
+                        <button
+                          onClick={handleSaveProductName}
+                          className="px-6 py-3 bg-purple-600 text-white font-bold rounded-lg hover:bg-purple-700 transition-all shadow-md"
+                        >
+                          ✓ Guardar
+                        </button>
+                        <button
+                          onClick={() => {
+                            setIsEditingName(false);
+                            setEditedName(foundProduct.name);
+                          }}
+                          className="px-4 py-3 bg-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-300 transition-all"
+                        >
+                          ✕ Cancelar
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
           </div>

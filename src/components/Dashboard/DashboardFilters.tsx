@@ -7,6 +7,7 @@ export interface FilterState {
   health: string | 'all'; // Tier 2
   sort: string | 'none';  // Tier 3
   size: string | 'all'; // Tier 4
+  raStatus: string | 'all'; // 🟢 Tier 5: Reposición Automática
 }
 
 interface DashboardFiltersProps {
@@ -126,6 +127,23 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({
               <option value="stock_desc">📦 Mayor a Menor Stock</option>
               <option value="stock_asc">📉 Menor a Mayor Stock</option>
             </optgroup>
+          </select>
+        </div>
+
+        {/* 🟢 TIER 5: Selector de Reposición Automática (RA) */}
+        <div className="w-full lg:w-48">
+          <label className="block text-xs font-bold text-gray-500 mb-1.5 uppercase tracking-wider flex items-center gap-2">
+            <span>🤖 Reposición (RA)</span>
+          </label>
+          <select
+            className="w-full p-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white font-medium cursor-pointer hover:border-blue-400 transition-colors"
+            value={filters.raStatus || 'all'}
+            onChange={(e) => onFilterChange({ ...filters, raStatus: e.target.value })}
+          >
+            <option value="all">Todas las Condiciones</option>
+            <option value="asignado">🟢 Completo (100% Asignado)</option>
+            <option value="apagada">🟡 RA Apagada (Incompleto)</option>
+            <option value="no_asignado">🔴 Cero Absoluto (No Asignado)</option>
           </select>
         </div>
 
